@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -14,7 +13,8 @@ import (
 	"github.com/korbiniankuhn/hetzner-restic/internal/config"
 	"github.com/korbiniankuhn/hetzner-restic/internal/metrics"
 	"github.com/korbiniankuhn/hetzner-restic/internal/restic"
-	"github.com/korbiniankuhn/hetzner-restic/internal/utils"
+	"github.com/korbiniankuhn/hetzner-restic/internal/s3"
+	"github.com/korbiniankuhn/hetzner-restic/internal/task"
 
 	"github.com/go-co-op/gocron/v2"
 )
@@ -35,9 +35,14 @@ func main() {
 	slog.Info("config loaded")
 
 	// Initialize restic
-	r, err := restic.NewRestic(c.ResticRepository, c.ResticPassword)
+	r, err := restic.NewRestic(c.Restic.Repository, c.Restic.Password)
 	panicOnError("failed to initialize restic", err)
 	slog.Info("restic initialized")
+
+	// Initialize S3
+	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket)
+	panicOnError("failed to initialize s3", err)
+	slog.Info("s3 initialized")
 
 	// Health check endpoint
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +61,7 @@ func main() {
 	wg := sync.WaitGroup{}
 
 	// Schedule jobs
-	s, err := gocron.NewScheduler(
+	scheduler, err := gocron.NewScheduler(
 		gocron.WithLimitConcurrentJobs(1, gocron.LimitModeWait),
 	)
 	if err != nil {
@@ -64,115 +69,48 @@ func main() {
 	}
 
 	// Pre backup scripts and restic snapshot creation
-	s.NewJob(
-		gocron.CronJob(c.BackupCron, true),
+	scheduler.NewJob(
+		gocron.CronJob(c.Cron.Backup, true),
 		gocron.NewTask(func() {
-			slog.Info("run pre backup scripts")
-
-			directories, err := utils.GetSubdirectories(c.ResticBackupSources)
-			if err != nil {
-				slog.Error("failed to get backup directories", "error", err)
-				return
-			}
-
-			slog.Info("backup directories", "directories", directories)
-			for _, dir := range directories {
-				err := r.BackupDirectory(dir)
-				if err != nil {
-					slog.Error("failed to backup directory", "directory", dir, "error", err)
-				} else {
-					slog.Info("backup completed", "directory", dir)
-				}
-			}
+			task.Backup(c, m, r)
 		}),
 	)
 
 	// restic check
-	s.NewJob(
-		gocron.CronJob(c.CheckCron, true),
+	scheduler.NewJob(
+		gocron.CronJob(c.Cron.Check, true),
 		gocron.NewTask(func() {
-			slog.Info("run restic check")
-			err := r.Check()
-			if err != nil {
-				slog.Error("failed to check restic repository", "error", err)
-			} else {
-				slog.Info("restic check completed")
-			}
+			task.ResticCheck(m, r)
 		}),
 	)
 
 	// restic forget and prune
-	s.NewJob(
-		gocron.CronJob(c.PruneCron, true),
+	scheduler.NewJob(
+		gocron.CronJob(c.Cron.Prune, true),
 		gocron.NewTask(func() {
-			slog.Info("run restic forget and prune")
-			err := r.ForgetAndPrune(c.ResticKeepDaily, c.ResticKeepWeekly, c.ResticKeepMonthly)
-			if err != nil {
-				slog.Error("failed to forget and prune restic repository", "error", err)
-			} else {
-				slog.Info("restic forget and prune completed")
-			}
-		}),
-	)
-
-	// restic forget and prune
-	s.NewJob(
-		gocron.CronJob(c.S3Cron, true),
-		gocron.NewTask(func() {
-			slog.Info("run s3 push")
-			err := r.ForgetAndPrune(c.ResticKeepDaily, c.ResticKeepWeekly, c.ResticKeepMonthly)
-			if err != nil {
-				slog.Error("failed to push to s3 bucket", "error", err)
-			} else {
-				slog.Info("s3 push completed")
-			}
+			task.ForgetAndPrune(c, m, r)
 		}),
 	)
 
 	// S3 backup
-	s.NewJob(
-		gocron.DurationJob(time.Minute),
+	scheduler.NewJob(
+		gocron.CronJob(c.Cron.S3, true),
 		gocron.NewTask(func() {
-			slog.Info("s3 backup")
-			snapshots, err := r.ListLatestSnapshots()
-			if err != nil {
-				slog.Error("failed to list latest snapshots", "error", err)
-				return
-			}
-			for _, snapshot := range snapshots {
-				archivePath := filepath.Join(c.S3LocalPath, snapshot.Name+".tar.gz")
-				err := r.DumpSnapshot(snapshot.ID, archivePath)
-				if err != nil {
-					slog.Error("failed to archive snapshot", "snapshot", snapshot.Name, "error", err)
-					continue
-				}
-				slog.Info("archived snapshot", "snapshot", snapshot.Name, "archive", archivePath)
-			}
+			task.S3Backup(c, m, r, s)
 		}),
-		gocron.JobOption(gocron.WithStartImmediately()),
 	)
 
-	// Capture restic stats
-	s.NewJob(
-		gocron.DurationJob(time.Minute),
+	// Capture restic and s3 stats at startup and regular intervals
+	scheduler.NewJob(
+		gocron.CronJob(c.Cron.Metrics, true),
 		gocron.NewTask(func() {
-			slog.Info("capture restic stats")
-			snapshots, err := r.ListSnapshots()
-			if err != nil {
-				slog.Error("failed to list snapshots", "error", err)
-				return
-			}
-			snapshotsCount := map[string]int{}
-			for _, snapshot := range snapshots {
-				snapshotsCount[snapshot.Paths[0]]++
-			}
-			slog.Info("snapshots count", "count", snapshotsCount)
+			task.UpdateAllMetrics(c, m, r, s)
 		}),
 		gocron.JobOption(gocron.WithStartImmediately()),
 	)
 
 	// Start scheduler
-	s.Start()
+	scheduler.Start()
 	slog.Info("scheduler started")
 
 	// Start http server
@@ -197,7 +135,7 @@ func main() {
 	slog.Info("received termination signal, shutting down")
 
 	// Stop scheduler
-	s.Shutdown()
+	scheduler.Shutdown()
 	slog.Info("scheduler stopped")
 
 	// Stop http server

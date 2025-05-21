@@ -1,20 +1,26 @@
 package restic
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
+	"strings"
 	"time"
+
+	"filippo.io/age"
 )
 
 type Restic struct {
 	repository string
 	password   string
-	mountpoint string
 }
 
 func NewRestic(path, password string) (Restic, error) {
@@ -79,8 +85,7 @@ func (r Restic) init() error {
 }
 
 func (r Restic) isPasswordCorrect() bool {
-	// TODO: optimise for performance (only get latest snapshot)
-	cmd := exec.Command("restic", "snapshots")
+	cmd := exec.Command("restic", "snapshots", "--latest=1", "--no-lock", "--json")
 	cmd.Env = r.getCommandEnv()
 
 	_, err := cmd.Output()
@@ -88,9 +93,8 @@ func (r Restic) isPasswordCorrect() bool {
 	return err == nil
 }
 
-// TODO: tags?
-func (r Restic) BackupDirectory(path string) error {
-	cmd := exec.Command("restic", "backup", path)
+func (r Restic) BackupDirectory(name, path string) error {
+	cmd := exec.Command("restic", "backup", path, "--tag", fmt.Sprintf("name=%s", name))
 	cmd.Env = r.getCommandEnv()
 
 	output, err := cmd.CombinedOutput()
@@ -161,11 +165,27 @@ type backupSummary struct {
 }
 
 type Snapshot struct {
-	ID   string
+	snapshotJson
 	Name string
 }
 
-func (r Restic) ListSnapshots() ([]snapshotJson, error) {
+func (s snapshotJson) GetName() string {
+	for _, tag := range s.Tags {
+		if strings.HasPrefix(tag, "name=") {
+			return strings.TrimPrefix(tag, "name=")
+		}
+	}
+	return s.ID
+}
+
+func (s snapshotJson) ToInternalSnapshot() Snapshot {
+	return Snapshot{
+		Name:         s.GetName(),
+		snapshotJson: s,
+	}
+}
+
+func (r Restic) ListSnapshots() ([]Snapshot, error) {
 	cmd := exec.Command("restic", "snapshots", "--no-lock", "--json")
 	cmd.Env = r.getCommandEnv()
 
@@ -175,10 +195,15 @@ func (r Restic) ListSnapshots() ([]snapshotJson, error) {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
 	}
 
-	var snapshots []snapshotJson
-	err = json.Unmarshal(output, &snapshots)
+	var snapshotJsons []snapshotJson
+	err = json.Unmarshal(output, &snapshotJsons)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal snapshots: %w", err)
+	}
+
+	snapshots := make([]Snapshot, len(snapshotJsons))
+	for i, snapshot := range snapshotJsons {
+		snapshots[i] = snapshot.ToInternalSnapshot()
 	}
 
 	return snapshots, nil
@@ -202,32 +227,131 @@ func (r Restic) ListLatestSnapshots() ([]Snapshot, error) {
 
 	snapshotList := make([]Snapshot, len(snapshots))
 	for i, snapshot := range snapshots {
-		snapshotList[i] = Snapshot{
-			ID:   snapshot.ID,
-			Name: path.Base(snapshot.Paths[0]),
-		}
+		snapshotList[i] = snapshot.ToInternalSnapshot()
 	}
 
 	return snapshotList, nil
 }
 
-func (r Restic) DumpSnapshot(id, archivePath string) error {
+type SnapshotStats struct {
+	TotalSize              int     `json:"total_size"`
+	TotalUncompressedSize  int     `json:"total_uncompressed_size"`
+	CompressionRatio       float64 `json:"compression_ratio"`
+	CompressionProgress    int     `json:"compression_progress"`
+	CompressionSpaceSaving float64 `json:"compression_space_saving"`
+	TotalBlobCount         int     `json:"total_blob_count"`
+	SnapshotsCount         int     `json:"snapshots_count"`
+}
+
+func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
+	cmd := exec.Command("restic", "stats", "--json", "--mode", "raw-data", "--no-lock", "--tag", fmt.Sprintf("name=%s", name))
+	cmd.Env = r.getCommandEnv()
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		return SnapshotStats{}, fmt.Errorf("failed to get snapshot stats: %w %s", err, output)
+	}
+
+	var stats SnapshotStats
+	err = json.Unmarshal(output, &stats)
+	if err != nil {
+		return SnapshotStats{}, fmt.Errorf("failed to unmarshal snapshots: %w", err)
+	}
+
+	return stats, nil
+}
+
+func (r Restic) CreateEncryptedDump(snapshot, path string) error {
+	// Create temporary directory
+	tmpDir, err := os.MkdirTemp("", "restic-dump")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
+	slog.Info("tmp dir", "dir", tmpDir)
+
+	// Restore the snapshot to the temporary directory
+	cmd := exec.Command("restic", "restore", snapshot, "--target", tmpDir, "--no-lock")
+	cmd.Env = r.getCommandEnv()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to restore snapshot: %s %w %s", snapshot, err, output)
+	}
+
 	// Create the archive file
-	outFile, err := os.Create(archivePath)
+	outFile, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create archive file: %w", err)
 	}
 	defer outFile.Close()
 
-	// Dump the snapshot to the archive file
-	cmd := exec.Command("restic", "dump", id, "/", "--target", archivePath, "-a", "tar")
-	cmd.Env = r.getCommandEnv()
+	// Create age recipient
+	recipient, err := age.NewScryptRecipient("secret")
+	if err != nil {
+		return fmt.Errorf("failed to create recipient: %w", err)
+	}
 
-	output, err := cmd.CombinedOutput()
+	// Create age writer
+	ageWriter, err := age.Encrypt(outFile, recipient)
+	if err != nil {
+		return fmt.Errorf("failed to create age encryptor: %w", err)
+	}
+	defer ageWriter.Close()
+
+	// Create gzip writer
+	gzipWriter := gzip.NewWriter(ageWriter)
+	defer gzipWriter.Close()
+
+	// Create tar writer
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer tarWriter.Close()
+
+	err = filepath.Walk(tmpDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Create a relative path within the archive
+		relPath, err := filepath.Rel(tmpDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil // skip root directory itself
+		}
+
+		// Prepare tar header
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+
+		// Write header
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		// For directories, no file content
+		if info.Mode().IsDir() {
+			return nil
+		}
+
+		// For files, write content
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		_, err = io.Copy(tarWriter, f)
+		return err
+	})
 
 	if err != nil {
-		_ = os.Remove(archivePath)
-		return fmt.Errorf("failed to dump snapshot %s: %w %s", id, err, output)
+		return fmt.Errorf("failed to walk through files: %w", err)
 	}
 
 	return nil
