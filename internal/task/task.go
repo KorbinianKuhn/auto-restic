@@ -1,11 +1,17 @@
 package task
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
+	"io"
+	"io/fs"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 
+	"filippo.io/age"
 	"github.com/korbiniankuhn/hetzner-restic/internal/config"
 	"github.com/korbiniankuhn/hetzner-restic/internal/metrics"
 	"github.com/korbiniankuhn/hetzner-restic/internal/restic"
@@ -119,6 +125,100 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 	return nil
 }
 
+func createEncryptedDump(r restic.Restic, snapshot, path string) error {
+	// Create temporary directory
+	tmpDir, err := os.MkdirTemp("", "restic-dump")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
+	slog.Info("tmp dir", "dir", tmpDir)
+
+	// Restore the snapshot to the temporary directory
+	err = r.Restore(snapshot, tmpDir)
+	if err != nil {
+		return fmt.Errorf("failed to restore snapshot: %w", err)
+	}
+
+	// Create the archive file
+	outFile, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("failed to create archive file: %w", err)
+	}
+	defer outFile.Close()
+
+	// Create age recipient
+	recipient, err := age.NewScryptRecipient("secret")
+	if err != nil {
+		return fmt.Errorf("failed to create recipient: %w", err)
+	}
+
+	// Create age writer
+	ageWriter, err := age.Encrypt(outFile, recipient)
+	if err != nil {
+		return fmt.Errorf("failed to create age encryptor: %w", err)
+	}
+	defer ageWriter.Close()
+
+	// Create gzip writer
+	gzipWriter := gzip.NewWriter(ageWriter)
+	defer gzipWriter.Close()
+
+	// Create tar writer
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer tarWriter.Close()
+
+	err = filepath.Walk(tmpDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Create a relative path within the archive
+		relPath, err := filepath.Rel(tmpDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil // skip root directory itself
+		}
+
+		// Prepare tar header
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+
+		// Write header
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		// For directories, no file content
+		if info.Mode().IsDir() {
+			return nil
+		}
+
+		// For files, write content
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		_, err = io.Copy(tarWriter, f)
+		return err
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk through files: %w", err)
+	}
+
+	return nil
+}
+
 func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) {
 	// TODO: Should we use configured backups from config?
 	slog.Info("s3 backup")
@@ -130,19 +230,19 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) {
 	for _, snapshot := range snapshots {
 		archivePath := filepath.Join(c.S3.LocalPath, snapshot.Name+".tar.gz.age")
 
-		err := r.CreateEncryptedDump(snapshot.ID, archivePath)
+		err := createEncryptedDump(r, snapshot.ID, archivePath)
 
 		if err != nil {
 			slog.Error("failed to archive snapshot", "snapshot", snapshot.Name, "error", err)
 			continue
 		}
 		slog.Info("archived snapshot", "snapshot", snapshot.Name, "archive", archivePath)
-		// err = s.UploadFile(archivePath)
-		// if err != nil {
-		// 	slog.Error("failed to upload snapshot to s3", "snapshot", snapshot.Name, "error", err)
-		// 	continue
-		// }
-		// slog.Info("uploaded snapshot to s3", "snapshot", snapshot.Name, "archive", archivePath)
+		err = s.UploadFile(archivePath)
+		if err != nil {
+			slog.Error("failed to upload snapshot to s3", "snapshot", snapshot.Name, "error", err)
+			continue
+		}
+		slog.Info("uploaded snapshot to s3", "snapshot", snapshot.Name, "archive", archivePath)
 	}
 
 	err = updateS3Metrics(c, m, s)

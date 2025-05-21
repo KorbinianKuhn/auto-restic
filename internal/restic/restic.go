@@ -1,21 +1,14 @@
 package restic
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
-
-	"filippo.io/age"
 )
 
 type Restic struct {
@@ -178,7 +171,7 @@ func (s snapshotJson) GetName() string {
 	return s.ID
 }
 
-func (s snapshotJson) ToInternalSnapshot() Snapshot {
+func (s snapshotJson) toInternalSnapshot() Snapshot {
 	return Snapshot{
 		Name:         s.GetName(),
 		snapshotJson: s,
@@ -203,7 +196,7 @@ func (r Restic) ListSnapshots() ([]Snapshot, error) {
 
 	snapshots := make([]Snapshot, len(snapshotJsons))
 	for i, snapshot := range snapshotJsons {
-		snapshots[i] = snapshot.ToInternalSnapshot()
+		snapshots[i] = snapshot.toInternalSnapshot()
 	}
 
 	return snapshots, nil
@@ -227,7 +220,7 @@ func (r Restic) ListLatestSnapshots() ([]Snapshot, error) {
 
 	snapshotList := make([]Snapshot, len(snapshots))
 	for i, snapshot := range snapshots {
-		snapshotList[i] = snapshot.ToInternalSnapshot()
+		snapshotList[i] = snapshot.toInternalSnapshot()
 	}
 
 	return snapshotList, nil
@@ -261,97 +254,13 @@ func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
 	return stats, nil
 }
 
-func (r Restic) CreateEncryptedDump(snapshot, path string) error {
-	// Create temporary directory
-	tmpDir, err := os.MkdirTemp("", "restic-dump")
-	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
-	}
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-	}()
-	slog.Info("tmp dir", "dir", tmpDir)
-
-	// Restore the snapshot to the temporary directory
-	cmd := exec.Command("restic", "restore", snapshot, "--target", tmpDir, "--no-lock")
+func (r Restic) Restore(snapshot, path string) error {
+	cmd := exec.Command("restic", "restore", snapshot, "--target", path, "--no-lock")
 	cmd.Env = r.getCommandEnv()
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot: %s %w %s", snapshot, err, output)
-	}
-
-	// Create the archive file
-	outFile, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("failed to create archive file: %w", err)
-	}
-	defer outFile.Close()
-
-	// Create age recipient
-	recipient, err := age.NewScryptRecipient("secret")
-	if err != nil {
-		return fmt.Errorf("failed to create recipient: %w", err)
-	}
-
-	// Create age writer
-	ageWriter, err := age.Encrypt(outFile, recipient)
-	if err != nil {
-		return fmt.Errorf("failed to create age encryptor: %w", err)
-	}
-	defer ageWriter.Close()
-
-	// Create gzip writer
-	gzipWriter := gzip.NewWriter(ageWriter)
-	defer gzipWriter.Close()
-
-	// Create tar writer
-	tarWriter := tar.NewWriter(gzipWriter)
-	defer tarWriter.Close()
-
-	err = filepath.Walk(tmpDir, func(path string, info fs.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Create a relative path within the archive
-		relPath, err := filepath.Rel(tmpDir, path)
-		if err != nil {
-			return err
-		}
-		if relPath == "." {
-			return nil // skip root directory itself
-		}
-
-		// Prepare tar header
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-		header.Name = relPath
-
-		// Write header
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
-		}
-
-		// For directories, no file content
-		if info.Mode().IsDir() {
-			return nil
-		}
-
-		// For files, write content
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		_, err = io.Copy(tarWriter, f)
-		return err
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to walk through files: %w", err)
 	}
 
 	return nil

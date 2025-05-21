@@ -1,0 +1,10 @@
+services:
+  hetzner-restic:
+    build: .
+    ports:
+      - 127.0.0.1:2112:2112
+    volumes:
+      - ./.env:/hetzner-restic/.env
+      - ./config.yml:/hetzner-restic/.config.yml:ro
+      - ./test/:/hetzner-restic/.test/
+      - /var/run/docker.sock:/var/run/docker.sock
