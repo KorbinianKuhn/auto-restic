@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     minio = {
-      source = "aminueza/minio"
+      source  = "aminueza/minio"
       version = "3.3.0"
     }
     local = {
@@ -15,12 +15,15 @@ variable "endpoint" {}
 variable "region" {}
 variable "access_key" {}
 variable "secret_key" {}
+variable "validity_period" {
+  default = 90 # days before an object can be deleted
+}
 
 provider "minio" {
-  minio_server   = "${var.endpoint}"
-  minio_user     = "${var.access_key}"
-  minio_password = "${var.secret_key}"
-  minio_region   = "${var.region}"
+  minio_server   = var.endpoint
+  minio_user     = var.access_key
+  minio_password = var.secret_key
+  minio_region   = var.region
   minio_ssl      = true
 }
 
@@ -33,38 +36,23 @@ resource "minio_s3_bucket" "bucket" {
 }
 
 resource "minio_s3_bucket_retention" "retention" {
-  bucket = minio_s3_bucket.bucket.id
-  mode = "GOVERNANCE"
-  unit = "DAYS"
-  validity_period = 1 # TODO: Export to variable
+  bucket          = minio_s3_bucket.bucket.id
+  mode            = "GOVERNANCE"
+  unit            = "DAYS"
+  validity_period = var.validity_period
 }
-
-resource "minio_s3_bucket_versioning" "versioning" {
-  bucket = minio_s3_bucket.bucket.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "minio_ilm_policy" "lifecyle_policy" {
+resource "null_resource" "lifecycle_policy" {
   depends_on = [minio_s3_bucket.bucket]
-  bucket = minio_s3_bucket.bucket.id
 
-  rule {
-    id = "expiry"
-    status = "Enabled"
-    expiration = "30d"
-    
-    noncurrent_expiration {
-        days = "60d"
-    }
+  provisioner "local-exec" {
+    command = "curl -X PUT -sS --fail --user '${var.access_key}:${var.secret_key}' --aws-sigv4 'aws:amz:${var.region}:s3' -d '@lifecycle_rules.xml' https://${minio_s3_bucket.bucket.id}.${var.endpoint}/?lifecycle"
   }
 }
 
 resource "local_file" "bucket_name" {
-  filename = "${path.module}/${minio_s3_bucket.bucket.id}.json"
-  content  = jsonencode({
-    bucket = "${minio_s3_bucket.bucket.id}",
+  filename = "${path.module}/bucket_config.json"
+  content = jsonencode({
+    bucket   = "${minio_s3_bucket.bucket.id}",
     endpoint = "${var.endpoint}",
   })
 }

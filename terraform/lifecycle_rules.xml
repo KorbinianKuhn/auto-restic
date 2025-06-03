@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Rule>
+        <ID>Expiry</ID>
+        <Status>Enabled</Status>
+        <Filter>
+            <Prefix>""</Prefix>
+        </Filter>
+        <AbortIncompleteMultipartUpload>
+            <DaysAfterInitiation>7</DaysAfterInitiation>
+        </AbortIncompleteMultipartUpload>
+        <NoncurrentVersionExpiration>
+            <NoncurrentDays>30</NoncurrentDays>
+        </NoncurrentVersionExpiration>
+    </Rule>
+</LifecycleConfiguration>
