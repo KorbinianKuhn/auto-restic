@@ -58,13 +58,13 @@ docker-compose.yml
 ```yaml
 services:
   hetzner-restic:
-    build: ghcr.io/korbiniankuhn/hetzner-restic:1.0.0
+    image: ghcr.io/korbiniankuhn/hetzner-restic:1.0.0
     container_name: hetzner-restic
     ports:
       - 127.0.0.1:2112:2112
     volumes:
       - ./.env:/hetzner-restic/.env:ro
-      - ./config.docker.yml:/hetzner-restic/config.yml:ro
+      - ./config.yml:/hetzner-restic/config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/data
       - ./restic:/repository

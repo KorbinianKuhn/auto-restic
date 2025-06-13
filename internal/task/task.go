@@ -218,20 +218,25 @@ func createEncryptedDump(r restic.Restic, snapshot, path string) error {
 }
 
 func createAndUploadArchive(r restic.Restic, s *s3.S3, snapshot restic.Snapshot) error {
-	archiveFile, err := os.CreateTemp("", snapshot.Name+".tar.gz.age")
+	archivePath := filepath.Join(os.TempDir(), snapshot.Name+".tar.gz.age")
+
+	slog.Info("creating temporary archive file", "snapshot", snapshot.Name, "path", archivePath)
+
+	archiveFile, err := os.Create(archivePath)
 	if err != nil {
 		slog.Error("failed to create temporary archive file", "snapshot", snapshot.Name, "error", err)
 	}
-	archiveFile.Close()
-	defer os.Remove(archiveFile.Name())
 
-	err = createEncryptedDump(r, snapshot.ID, archiveFile.Name())
+	archiveFile.Close()
+	defer os.Remove(archivePath)
+
+	err = createEncryptedDump(r, snapshot.ID, archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to create encrypted dump: %w", err)
 	}
 	slog.Info("created encrypted snapshot", "snapshot", snapshot.Name)
 
-	err = s.UploadFile(archiveFile.Name())
+	err = s.UploadFile(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to upload snapshot to s3: %w", err)
 	}
