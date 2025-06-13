@@ -98,7 +98,6 @@ func main() {
 		gocron.NewTask(func() {
 			task.S3Backup(c, m, r, s)
 		}),
-		// gocron.JobOption(gocron.WithStartImmediately()),
 	)
 
 	// Capture restic and s3 stats at startup and regular intervals

@@ -40,16 +40,15 @@ func ForgetAndPrune(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	err = updateResticMetrics(c, m, r)
 	if err != nil {
 		slog.Error("failed to update restic metrics", "error", err)
-	} else {
-		slog.Info("restic metrics updated")
 	}
 }
 
 func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
+	slog.Info("starting restic backups")
 	for _, backup := range c.Backups {
 		if backup.PreCommand != "" {
 			slog.Info("run pre backup command", "command", backup.PreCommand)
-			cmd := exec.Command(backup.PreCommand)
+			cmd := exec.Command("sh", "-c", backup.PreCommand)
 			err := cmd.Run()
 			if err != nil {
 				slog.Error("failed to run pre backup command", "command", backup.PreCommand, "error", err)
@@ -66,7 +65,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 
 		if backup.PostCommand != "" {
 			slog.Info("run post backup command", "command", backup.PostCommand)
-			cmd := exec.Command(backup.PostCommand)
+			cmd := exec.Command("sh", "-c", backup.PostCommand)
 			err := cmd.Run()
 			if err != nil {
 				slog.Error("failed to run post backup command", "command", backup.PostCommand, "error", err)
@@ -78,9 +77,9 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	err := updateResticMetrics(c, m, r)
 	if err != nil {
 		slog.Error("failed to update restic metrics", "error", err)
-	} else {
-		slog.Info("restic metrics updated")
 	}
+
+	slog.Info("restic backups completed")
 }
 
 func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) error {
@@ -134,7 +133,6 @@ func createEncryptedDump(r restic.Restic, snapshot, path string) error {
 	defer func() {
 		_ = os.RemoveAll(tmpDir)
 	}()
-	slog.Info("tmp dir", "dir", tmpDir)
 
 	// Restore the snapshot to the temporary directory
 	err = r.Restore(snapshot, tmpDir)
@@ -219,43 +217,69 @@ func createEncryptedDump(r restic.Restic, snapshot, path string) error {
 	return nil
 }
 
-func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) {
-	// TODO: Should we use configured backups from config?
-	slog.Info("s3 backup")
+func createAndUploadArchive(r restic.Restic, s *s3.S3, snapshot restic.Snapshot) error {
+	archiveFile, err := os.CreateTemp("", snapshot.Name+".tar.gz.age")
+	if err != nil {
+		slog.Error("failed to create temporary archive file", "snapshot", snapshot.Name, "error", err)
+	}
+	archiveFile.Close()
+	defer os.Remove(archiveFile.Name())
+
+	err = createEncryptedDump(r, snapshot.ID, archiveFile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to create encrypted dump: %w", err)
+	}
+	slog.Info("created encrypted snapshot", "snapshot", snapshot.Name)
+
+	err = s.UploadFile(archiveFile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to upload snapshot to s3: %w", err)
+	}
+
+	return nil
+}
+
+func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
+	slog.Info("creating s3 backups")
+
 	snapshots, err := r.ListLatestSnapshots()
 	if err != nil {
 		slog.Error("failed to list latest snapshots", "error", err)
 		return
 	}
-	for _, snapshot := range snapshots {
-		archivePath := filepath.Join(c.S3.LocalPath, snapshot.Name+".tar.gz.age")
 
-		err := createEncryptedDump(r, snapshot.ID, archivePath)
+	for _, backup := range c.Backups {
+		snapshot := restic.Snapshot{}
+		for _, s := range snapshots {
+			if s.Name == backup.Name {
+				snapshot = s
+				break
+			}
+		}
 
-		if err != nil {
-			slog.Error("failed to archive snapshot", "snapshot", snapshot.Name, "error", err)
+		if snapshot.ID == "" {
+			slog.Warn("no snapshot found for backup", "backup", backup.Name)
 			continue
 		}
-		slog.Info("archived snapshot", "snapshot", snapshot.Name, "archive", archivePath)
-		err = s.UploadFile(archivePath)
+
+		err := createAndUploadArchive(r, s3, snapshot)
 		if err != nil {
-			slog.Error("failed to upload snapshot to s3", "snapshot", snapshot.Name, "error", err)
+			slog.Error("failed to create and upload archive", "snapshot", snapshot.Name, "error", err)
 			continue
 		}
-		slog.Info("uploaded snapshot to s3", "snapshot", snapshot.Name, "archive", archivePath)
+
+		slog.Info("uploaded snapshot to s3", "snapshot", snapshot.Name)
 	}
 
-	err = updateS3Metrics(c, m, s)
+	err = updateS3Metrics(c, m, s3)
 	if err != nil {
 		slog.Error("failed to update s3 metrics", "error", err)
-	} else {
-		slog.Info("s3 metrics updated")
 	}
+
+	slog.Info("s3 backups completed")
 }
 
 func updateS3Metrics(c config.Config, m *metrics.Metrics, s *s3.S3) error {
-	slog.Info("update s3 metrics")
-
 	count := map[string]int{}
 	totalSize := map[string]int64{}
 	latestSize := map[string]int64{}

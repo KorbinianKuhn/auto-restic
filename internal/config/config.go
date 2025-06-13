@@ -26,7 +26,6 @@ type CronConfig struct {
 }
 
 type S3Config struct {
-	LocalPath  string `mapstructure:"local_path"`
 	AccessKey  string `mapstructure:"access_key"`
 	SecretKey  string `mapstructure:"secret_key"`
 	Endpoint   string `mapstructure:"endpoint"`
@@ -75,7 +74,6 @@ func Get() (Config, error) {
 	_ = v.BindEnv("cron.s3")
 	_ = v.BindEnv("cron.metrics")
 	_ = v.BindEnv("metrics_enabled")
-	_ = v.BindEnv("s3.local_path")
 	_ = v.BindEnv("s3.access_key")
 	_ = v.BindEnv("s3.secret_key")
 	_ = v.BindEnv("s3.endpoint")
@@ -83,17 +81,16 @@ func Get() (Config, error) {
 	_ = v.BindEnv("s3.passphrase")
 
 	// Default values
-	v.SetDefault("restic.repository", "/restic")
+	v.SetDefault("restic.repository", "/repository")
 	v.SetDefault("restic.keep_daily", 7)
 	v.SetDefault("restic.keep_weekly", 4)
 	v.SetDefault("restic.keep_monthly", 3)
-	v.SetDefault("cron.backup", "0 0 2 * * *")  // Every day at 2 AM
-	v.SetDefault("cron.check", "0 0 2 * * 0")   // Every Sunday at 2 AM
-	v.SetDefault("cron.prune", "0 0 2 * * 0")   // Every Sunday at 2 AM
-	v.SetDefault("cron.s3", "0 0 2 * * 0")      // Every Sunday at 2 AM
-	v.SetDefault("cron.metrics", "0 0 0 * * *") // Every day at 0 AM
+	v.SetDefault("cron.metrics", "0 0 0 * * *") // Every day at 00:00
+	v.SetDefault("cron.backup", "0 0 2 * * *")  // Every day at 02:00
+	v.SetDefault("cron.s3", "0 1 2 * * 0")      // Every Sunday 02:01
+	v.SetDefault("cron.check", "0 2 2 * * 0")   // Every Sunday 02:02
+	v.SetDefault("cron.prune", "0 3 2 * * 0")   // Every Sunday 02:03
 	v.SetDefault("metrics_enabled", true)
-	v.SetDefault("s3.local_path", "/s3")
 
 	// Optionally load config file
 	if err := v.ReadInConfig(); err != nil {

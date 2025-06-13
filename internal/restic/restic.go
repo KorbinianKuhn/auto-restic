@@ -2,9 +2,7 @@ package restic
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -22,39 +20,27 @@ func NewRestic(path, password string) (Restic, error) {
 		password:   password,
 	}
 
-	// Check if repository exists
-	exists, err := r.exists()
-	if err != nil {
-		return Restic{}, fmt.Errorf("failed to check if restic repository exists: %w", err)
+	cmd := exec.Command("restic", "snapshots", "--latest=1", "--no-lock")
+	cmd.Env = r.getCommandEnv()
+
+	output, err := cmd.CombinedOutput()
+
+	if err == nil {
+		return r, nil
 	}
 
-	// Check if password is correct
-	if exists {
-		if r.isPasswordCorrect() {
-			return r, nil
-		} else {
-			return Restic{}, fmt.Errorf("restic password is incorrect")
+	if strings.Contains(string(output), "unable to open config file") {
+		err = r.init()
+		if err != nil {
+			return Restic{}, fmt.Errorf("failed to initialize restic repository: %w", err)
 		}
-	}
-
-	// Initialize repository if it does not exist
-	err = r.init()
-	if err != nil {
-		return Restic{}, fmt.Errorf("failed to initialize restic repository: %w", err)
+	} else if strings.Contains(string(output), "wrong password or no key found") {
+		return Restic{}, fmt.Errorf("restic password is incorrect: %w %s", err, output)
+	} else {
+		return Restic{}, fmt.Errorf("failed to run restic command: %w %s", err, output)
 	}
 
 	return r, nil
-}
-
-func (r Restic) exists() (bool, error) {
-	_, err := os.Stat(r.repository)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
 }
 
 func (r Restic) getCommandEnv() []string {
@@ -77,17 +63,8 @@ func (r Restic) init() error {
 	return nil
 }
 
-func (r Restic) isPasswordCorrect() bool {
-	cmd := exec.Command("restic", "snapshots", "--latest=1", "--no-lock", "--json")
-	cmd.Env = r.getCommandEnv()
-
-	_, err := cmd.Output()
-
-	return err == nil
-}
-
 func (r Restic) BackupDirectory(name, path string) error {
-	cmd := exec.Command("restic", "backup", path, "--tag", fmt.Sprintf("name=%s", name))
+	cmd := exec.Command("restic", "backup", path, "--tag", fmt.Sprintf("name=%s", name), "--json")
 	cmd.Env = r.getCommandEnv()
 
 	output, err := cmd.CombinedOutput()

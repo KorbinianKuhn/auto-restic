@@ -1,4 +1,6 @@
 *.env
 config.yml
+config.docker.yml
+docker-compose.yml
 .DS_Store
 test
