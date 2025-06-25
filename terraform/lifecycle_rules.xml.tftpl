@@ -7,13 +7,13 @@
             <Prefix></Prefix>
         </Filter>
         <Expiration>
-            <Days>1</Days>
+            <Days>${lifecycle_expiration_days}</Days>
         </Expiration>
         <AbortIncompleteMultipartUpload>
             <DaysAfterInitiation>7</DaysAfterInitiation>
         </AbortIncompleteMultipartUpload>
         <NoncurrentVersionExpiration>
-            <NoncurrentDays>1</NoncurrentDays>
+            <NoncurrentDays>${noncurrent_version_expiration_days}</NoncurrentDays>
         </NoncurrentVersionExpiration>
     </Rule>
     <Rule>

@@ -104,34 +104,34 @@ func (r Restic) ForgetAndPrune(keepDaily, keepWeekly, keepMonthly int) error {
 
 type snapshotJson struct {
 	Time           time.Time     `json:"time"`
+	Parent         string        `json:"parent"`
 	Tree           string        `json:"tree"`
 	Paths          []string      `json:"paths"`
 	Hostname       string        `json:"hostname"`
 	Username       string        `json:"username"`
-	UID            int           `json:"uid"`
-	GID            int           `json:"gid"`
-	ProgramVersion string        `json:"program_version"`
-	ID             string        `json:"id"`
-	ShortID        string        `json:"short_id"`
 	Tags           []string      `json:"tags"`
+	ProgramVersion string        `json:"program_version"`
 	Excludes       []string      `json:"excludes"`
 	Summary        backupSummary `json:"summary"`
+	ID             string        `json:"id"`
+	ShortID        string        `json:"short_id"`
 }
 
 type backupSummary struct {
-	FilesNew            int     `json:"files_new"`
-	FilesChanged        int     `json:"files_changed"`
-	FilesUnmodified     int     `json:"files_unmodified"`
-	DirsNew             int     `json:"dirs_new"`
-	DirsChanged         int     `json:"dirs_changed"`
-	DirsUnmodified      int     `json:"dirs_unmodified"`
-	DataBlobs           int     `json:"data_blobs"`
-	TreeBlobs           int     `json:"tree_blobs"`
-	DataAdded           int     `json:"data_added"`
-	TotalFilesProcessed int     `json:"total_files_processed"`
-	TotalBytesProcessed int     `json:"total_bytes_processed"`
-	TotalDuration       float64 `json:"total_duration"`
-	SnapshotID          string  `json:"snapshot_id"`
+	BackupStart         time.Time `json:"backup_start"`
+	BackupEnd           time.Time `json:"backup_end"`
+	FilesNew            int       `json:"files_new"`
+	FilesChanged        int       `json:"files_changed"`
+	FilesUnmodified     int       `json:"files_unmodified"`
+	DirsNew             int       `json:"dirs_new"`
+	DirsChanged         int       `json:"dirs_changed"`
+	DirsUnmodified      int       `json:"dirs_unmodified"`
+	DataBlobs           int       `json:"data_blobs"`
+	TreeBlobs           int       `json:"tree_blobs"`
+	DataAdded           int       `json:"data_added"`
+	DataAddedPacked     int       `json:"data_added_packed"`
+	TotalFilesProcessed int       `json:"total_files_processed"`
+	TotalBytesProcessed int       `json:"total_bytes_processed"`
 }
 
 type Snapshot struct {

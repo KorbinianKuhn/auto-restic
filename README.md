@@ -42,9 +42,9 @@ restic:
 cron:
   metrics: "0 0 0 * * *" # Every day at 00:00
   backup: "0 0 2 * * *" # Every day at 02:00
-  s3: "0 1 2 * * *" # Every Sunday 02:01
-  check: "0 2 2 * * *" # Every Sunday 02:01
-  prune: "0 3 2 * * *" # Every Sunday 02:03
+  s3: "0 1 2 * * 0" # Every Sunday 02:01
+  check: "0 2 2 * * 0" # Every Sunday 02:01
+  prune: "0 3 2 * * 0" # Every Sunday 02:03
 
 backups:
   - path: /data/mongodb-dump

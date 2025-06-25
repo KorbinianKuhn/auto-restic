@@ -104,8 +104,7 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 	for _, snapshot := range snapshots {
 		snapshotBackupNames[snapshot.Name] = true
 		count[snapshot.Name]++
-		latestSize[snapshot.Name] = int64(snapshot.Summary.TotalBytesProcessed)
-		totalSize[snapshot.Name] = 0
+		latestSize[snapshot.Name] = int64(snapshot.Summary.DataAddedPacked)
 		latestTime[snapshot.Name] = float64(snapshot.Time.Unix())
 	}
 
@@ -114,7 +113,7 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 		if err != nil {
 			return fmt.Errorf("failed to get snapshot stats: %w", err)
 		}
-		totalSize[name] = int64(stats.TotalSize)
+		totalSize[name] += int64(stats.TotalSize)
 	}
 
 	for name := range count {

@@ -1,8 +1,9 @@
 
-terraform.tfvars
+*.tfvars
 .terraform
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
 DS_Store
 bucket_config.json
+test.txt

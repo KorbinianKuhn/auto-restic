@@ -1,0 +1,7 @@
+endpoint = "nbg1.your-objectstorage.com"
+region = "nbg1"
+access_key = ""
+secret_key = ""
+object_retention_days = 90
+lifecycle_expiration_days = 90
+noncurrent_version_expiration_days = 30
