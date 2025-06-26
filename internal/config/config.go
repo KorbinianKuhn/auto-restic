@@ -2,12 +2,53 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/joho/godotenv"
 
 	"github.com/spf13/viper"
 )
+
+type LogFormat string
+
+const (
+	LogFormatText    LogFormat = "text"
+	LogFormatJSON    LogFormat = "json"
+	LogFormatConsole LogFormat = "console"
+)
+
+func (f *LogFormat) UnmarshalText(text []byte) error {
+	switch format := string(text); format {
+	case string(LogFormatText), string(LogFormatJSON), string(LogFormatConsole):
+		*f = LogFormat(format)
+		return nil
+	default:
+		return fmt.Errorf("invalid log format: %s", format)
+	}
+}
+
+type LoggingConfig struct {
+	Level     string     `mapstructure:"level"`
+	Format    LogFormat  `mapstructure:"format"`
+	SlogLevel slog.Level `mapstructure:"-"`
+}
+
+func (c *LoggingConfig) Parse() error {
+	switch strings.ToLower(c.Level) {
+	case "debug":
+		c.SlogLevel = slog.LevelDebug
+	case "info":
+		c.SlogLevel = slog.LevelInfo
+	case "warn":
+		c.SlogLevel = slog.LevelWarn
+	case "error":
+		c.SlogLevel = slog.LevelError
+	default:
+		return fmt.Errorf("invalid log level: %s", c.Level)
+	}
+	return nil
+}
 
 type ResticConfig struct {
 	Password    string `mapstructure:"password"`
@@ -42,6 +83,7 @@ type BackupConfig struct {
 }
 
 type Config struct {
+	Logging        LoggingConfig  `mapstructure:"logging"`
 	Restic         ResticConfig   `mapstructure:"restic"`
 	Cron           CronConfig     `mapstructure:"cron"`
 	S3             S3Config       `mapstructure:"s3"`
@@ -63,6 +105,8 @@ func Get() (Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// Bind environment variables
+	_ = v.BindEnv("logging.level")
+	_ = v.BindEnv("logging.format")
 	_ = v.BindEnv("restic.password")
 	_ = v.BindEnv("restic.repository")
 	_ = v.BindEnv("restic.keep_daily")
@@ -81,6 +125,8 @@ func Get() (Config, error) {
 	_ = v.BindEnv("s3.passphrase")
 
 	// Default values
+	v.SetDefault("logging.level", "info")
+	v.SetDefault("logging.format", "text")
 	v.SetDefault("restic.repository", "/repository")
 	v.SetDefault("restic.keep_daily", 7)
 	v.SetDefault("restic.keep_weekly", 4)
@@ -101,6 +147,10 @@ func Get() (Config, error) {
 
 	if err := v.Unmarshal(&config); err != nil {
 		return config, fmt.Errorf("unable to decode config into struct: %w", err)
+	}
+
+	if err := config.Logging.Parse(); err != nil {
+		return config, fmt.Errorf("invalid logging configuration: %w", err)
 	}
 
 	if config.Restic.Password == "" {

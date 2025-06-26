@@ -33,6 +33,10 @@ S3_PASSPHRASE=
 config.yml (all variables are shown with defaults and are optional)
 
 ```yaml
+logging:
+  level: info # one of (debug, info, warn, error)
+  format: text # one of (text, json, console)
+
 restic:
   repository: /repository
   keep_daily: 7

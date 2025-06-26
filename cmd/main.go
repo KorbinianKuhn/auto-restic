@@ -27,12 +27,23 @@ func panicOnError(message string, err error) {
 }
 
 func main() {
-	slog.Info("starting hetzner-restic")
-
 	// Load config
 	c, err := config.Get()
 	panicOnError("failed to load config", err)
-	slog.Info("config loaded")
+
+	// Set logger
+	switch c.Logging.Format {
+	case config.LogFormatText:
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: c.Logging.SlogLevel,
+		})))
+	case config.LogFormatJSON:
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: c.Logging.SlogLevel,
+		})))
+	default:
+		slog.SetLogLoggerLevel(c.Logging.SlogLevel)
+	}
 
 	// Initialize restic
 	r, err := restic.NewRestic(c.Restic.Repository, c.Restic.Password)
