@@ -123,7 +123,7 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 	return nil
 }
 
-func createEncryptedDump(r restic.Restic, snapshot, path string) error {
+func createEncryptedDump(r restic.Restic, snapshot, path string, passphrase string) error {
 	// Create temporary directory
 	tmpDir, err := os.MkdirTemp("", "restic-dump")
 	if err != nil {
@@ -147,7 +147,7 @@ func createEncryptedDump(r restic.Restic, snapshot, path string) error {
 	defer outFile.Close()
 
 	// Create age recipient
-	recipient, err := age.NewScryptRecipient("secret")
+	recipient, err := age.NewScryptRecipient(passphrase)
 	if err != nil {
 		return fmt.Errorf("failed to create recipient: %w", err)
 	}
@@ -216,7 +216,7 @@ func createEncryptedDump(r restic.Restic, snapshot, path string) error {
 	return nil
 }
 
-func createAndUploadArchive(r restic.Restic, s *s3.S3, snapshot restic.Snapshot) error {
+func createAndUploadArchive(r restic.Restic, s *s3.S3, snapshot restic.Snapshot, passphrase string) error {
 	archivePath := filepath.Join(os.TempDir(), snapshot.Name+".tar.gz.age")
 
 	slog.Info("creating temporary archive file", "snapshot", snapshot.Name, "path", archivePath)
@@ -229,7 +229,7 @@ func createAndUploadArchive(r restic.Restic, s *s3.S3, snapshot restic.Snapshot)
 	archiveFile.Close()
 	defer os.Remove(archivePath)
 
-	err = createEncryptedDump(r, snapshot.ID, archivePath)
+	err = createEncryptedDump(r, snapshot.ID, archivePath, passphrase)
 	if err != nil {
 		return fmt.Errorf("failed to create encrypted dump: %w", err)
 	}
@@ -266,7 +266,7 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 			continue
 		}
 
-		err := createAndUploadArchive(r, s3, snapshot)
+		err := createAndUploadArchive(r, s3, snapshot, c.S3.Passphrase)
 		if err != nil {
 			slog.Error("failed to create and upload archive", "snapshot", snapshot.Name, "error", err)
 			continue

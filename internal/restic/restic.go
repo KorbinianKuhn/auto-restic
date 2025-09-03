@@ -76,6 +76,36 @@ func (r Restic) BackupDirectory(name, path string) error {
 	return nil
 }
 
+func (r Restic) RemoveBackupDirectory(name string) (string, error) {
+	snapshots, err := r.listSnapshotsByName(name)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to list snapshots by name: %w", err)
+	}
+
+	if len(snapshots) == 0 {
+		return "", fmt.Errorf("no snapshots found for name: %s", name)
+	}
+
+	ids := []string{}
+	for _, s := range snapshots {
+		ids = append(ids, s.ShortID)
+	}
+
+	args := append([]string{"forget", "--prune", "--json"}, ids...)
+
+	cmd := exec.Command("restic", args...)
+	cmd.Env = r.getCommandEnv()
+
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to remove backup %s: %w %s", name, err, output)
+	}
+
+	return string(output), nil
+}
+
 func (r Restic) Check() error {
 	cmd := exec.Command("restic", "check")
 	cmd.Env = r.getCommandEnv()
@@ -163,6 +193,30 @@ func (r Restic) ListSnapshots() ([]Snapshot, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
+	}
+
+	var snapshotJsons []snapshotJson
+	err = json.Unmarshal(output, &snapshotJsons)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal snapshots: %w", err)
+	}
+
+	snapshots := make([]Snapshot, len(snapshotJsons))
+	for i, snapshot := range snapshotJsons {
+		snapshots[i] = snapshot.toInternalSnapshot()
+	}
+
+	return snapshots, nil
+}
+
+func (r Restic) listSnapshotsByName(name string) ([]Snapshot, error) {
+	cmd := exec.Command("restic", "snapshots", "--tag", fmt.Sprintf("name=%s", name), "--no-lock", "--json")
+	cmd.Env = r.getCommandEnv()
+
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list snapshots by name: %w %s", err, output)
 	}
 
 	var snapshotJsons []snapshotJson

@@ -1,13 +1,14 @@
 # Build
 
-FROM golang:1.24.3-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /app
 COPY . .
 
 RUN go mod download
 
-RUN go build -o /build ./cmd/main.go
+RUN go build -o server ./cmd/server/main.go
+RUN go build -o cli ./cmd/cli/main.go
 
 # Runtime
 
@@ -18,6 +19,7 @@ WORKDIR /hetzner-restic
 # Install restic and docker CLI
 RUN apk add --no-cache restic docker-cli
 
-COPY --from=builder /build /app
+COPY --from=builder /app/server .
+COPY --from=builder /app/cli ./hetzner-restic
 
-ENTRYPOINT ["/app"]
+ENTRYPOINT ["/app/server"]

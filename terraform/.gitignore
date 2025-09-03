@@ -6,4 +6,5 @@
 *.tfstate.backup
 DS_Store
 bucket_config.json
+lifecycle_rules.xml
 test.txt

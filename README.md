@@ -1,5 +1,10 @@
 # Hetzner Restic
 
+- EasyBackup
+- BackupWORM
+- ResticWORM
+- AutoRestic
+
 Schedule and monitor Restic backups and S3 snapshots with client-side encryption and WORM (Write Once Read Many) protection.
 
 ## Getting Started
@@ -69,20 +74,39 @@ services:
     volumes:
       - ./.env:/hetzner-restic/.env:ro
       - ./config.yml:/hetzner-restic/config.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/data
       - ./restic:/repository
+      - /var/run/docker.sock:/var/run/docker.sock # only required if you run docker commands for pre-post backup scripts
 ```
 
-## Restore
+## CLI
 
-### Restic
+A CLI is provided to list, remove, and restore backups (restic or S3). The CLI uses the same config as the server (e.g. for access keys, secrets).
 
-TODO
+Connect to a running container
+
+```bash
+docker exec -it hetzner-restic sh
+```
+
+or start a temporary one:
+
+```bash
+docker compose run --entrypoint "/bin/sh" hetzner-restic
+```
+
+| Command                                                                   | Description                                 |
+| ------------------------------------------------------------------------- | ------------------------------------------- |
+| hetzner-restic restic ls                                                  | List all local backups and snapshots        |
+| hetzner-restic restic rm --name ""                                        | Remove all snapshots of a backup            |
+| hetzner-restic restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
+| hetzner-restic s3 ls                                                      | List all S3 backups and versions            |
+| hetzner-restic s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
+| hetzner-restic s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
 
 ### S3 (Disaster Recovery)
 
-S3 snapshots are encrypted with age using the provided passphrase. To decrypt a backup run:
+S3 snapshots are encrypted with age using the provided passphrase. To decrypt a backup without using the CLI run:
 
 ```bash
 age -d -o your-backup-name.tar.gz your-backup-name.tar.gz.age
@@ -91,18 +115,60 @@ age -d -o your-backup-name.tar.gz your-backup-name.tar.gz.age
 
 ## Monitoring
 
-Prometheus metrics are exported under localhost:2112/metrics
+Prometheus metrics are exported under [localhost:2112/metrics](localhost:2112/metrics)
 
-TODO: Example
+```yaml
+# HELP restic_repository_snapshot_latest_size_bytes Size of the latest snapshot per backup name
+# TYPE restic_repository_snapshot_latest_size_bytes gauge
+restic_repository_snapshot_latest_size_bytes{name="mongodb-dump"} 1240
+restic_repository_snapshot_latest_size_bytes{name="production"} 0
+restic_repository_snapshot_latest_size_bytes{name="staging"} 0
+# HELP restic_repository_snapshot_latest_time Timestamp of the latest snapshot per backup name
+# TYPE restic_repository_snapshot_latest_time gauge
+restic_repository_snapshot_latest_time{name="mongodb-dump"} 1.749808336e+09
+restic_repository_snapshot_latest_time{name="production"} 1.7568957e+09
+restic_repository_snapshot_latest_time{name="staging"} 1.7568957e+09
+# HELP restic_repository_snapshot_total Number of snapshots per backup name
+# TYPE restic_repository_snapshot_total gauge
+restic_repository_snapshot_total{name="mongodb-dump"} 2
+restic_repository_snapshot_total{name="production"} 4
+restic_repository_snapshot_total{name="staging"} 2
+# HELP restic_repository_snapshot_total_size_bytes Total size of all snapshots per backup name
+# TYPE restic_repository_snapshot_total_size_bytes gauge
+restic_repository_snapshot_total_size_bytes{name="mongodb-dump"} 2527
+restic_repository_snapshot_total_size_bytes{name="production"} 2180
+restic_repository_snapshot_total_size_bytes{name="staging"} 1111
+# HELP restic_s3_latest_size_bytes Size of the latest snapshot dump in s3 per backup name
+# TYPE restic_s3_latest_size_bytes gauge
+restic_s3_latest_size_bytes{name="mongodb-dump"} 711
+restic_s3_latest_size_bytes{name="production"} 395
+restic_s3_latest_size_bytes{name="staging"} 389
+# HELP restic_s3_latest_time Timestamp of the latest snapshot dump in s3 per backup name
+# TYPE restic_s3_latest_time gauge
+restic_s3_latest_time{name="mongodb-dump"} 1.756895707e+09
+restic_s3_latest_time{name="production"} 1.756895705e+09
+restic_s3_latest_time{name="staging"} 1.756895706e+09
+# HELP restic_s3_total Number of snapshot dumps in s3 per backup name
+# TYPE restic_s3_total gauge
+restic_s3_total{name="mongodb-dump"} 3
+restic_s3_total{name="production"} 3
+restic_s3_total{name="staging"} 3
+# HELP restic_s3_total_size_bytes Total size of all snapshot dumps in s3 per backup name
+# TYPE restic_s3_total_size_bytes gauge
+restic_s3_total_size_bytes{name="mongodb-dump"} 2133
+restic_s3_total_size_bytes{name="production"} 1185
+restic_s3_total_size_bytes{name="staging"} 1167
+```
 
 ## Grafana
 
-TODO: Image and dashboard.json
-
 A prebuilt dashboard is [here](dashboard.json)
+
+![Screenshot of the Grafana dashboard for HetznerRestic](dashboard.png)
 
 ## Credits
 
 - [https://github.com/go-co-op/gocron](https://github.com/go-co-op/gocron)
 - [https://github.com/spf13/viper](https://github.com/spf13/viper)
+- [https://github.com/spf13/cobra](https://github.com/spf13/cobra)
 - [https://github.com/FiloSottile/age](https://github.com/FiloSottile/age)

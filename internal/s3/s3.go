@@ -48,6 +48,8 @@ type S3Object struct {
 	ExpirationDate time.Time
 	CreatedAt      time.Time
 	IsLatest       bool
+	VersionID      string
+	Key            string
 }
 
 func (s3 S3) ListObjects() ([]S3Object, error) {
@@ -66,6 +68,8 @@ func (s3 S3) ListObjects() ([]S3Object, error) {
 			ExpirationDate: obj.Expiration,
 			CreatedAt:      obj.LastModified,
 			IsLatest:       obj.IsLatest,
+			VersionID:      obj.VersionID,
+			Key:            obj.Key,
 		})
 	}
 
@@ -90,5 +94,26 @@ func (s3 S3) UploadFile(filePath string) error {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 
+	return nil
+}
+
+func (s3 S3) RemoveObject(objectKey, versionID string) error {
+	err := s3.client.RemoveObject(context.TODO(), s3.bucket, objectKey, minio.RemoveObjectOptions{
+		VersionID: versionID,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to remove S3 object: %w", err)
+	}
+	return nil
+}
+
+func (s3 S3) DownloadFile(objectKey, versionID, filePath string) error {
+	err := s3.client.FGetObject(context.TODO(), s3.bucket, objectKey, filePath, minio.GetObjectOptions{
+		VersionID: versionID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to download S3 object: %w", err)
+	}
 	return nil
 }
