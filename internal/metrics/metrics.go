@@ -7,122 +7,223 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+type SchedulerError string
+
+const (
+	SchedulerErrorResticCheck            SchedulerError = "restic_check"
+	SchedulerErrorResticForgetAndPrune   SchedulerError = "restic_forget_and_prune"
+	SchedulerErrorResticListSnapshots    SchedulerError = "restic_list_snapshots"
+	SchedulerErrorResticGetSnapshotStats SchedulerError = "restic_get_snapshot_stats"
+	SchedulerErrorS3ListObjects          SchedulerError = "s3_list_objects"
+)
+
 type Metrics struct {
-	snapshotsTotal     *prometheus.GaugeVec
-	snapshotTotalSize  *prometheus.GaugeVec
-	snapshotLatestSize *prometheus.GaugeVec
-	snapshotLatestTime *prometheus.GaugeVec
-	s3Total            *prometheus.GaugeVec
-	s3TotalSize        *prometheus.GaugeVec
-	s3LatestSize       *prometheus.GaugeVec
-	s3LatestTime       *prometheus.GaugeVec
+	schedulerErrors                *prometheus.CounterVec
+	resticSnapshotErrors           *prometheus.CounterVec
+	resticSnapshotLatestDuration   *prometheus.GaugeVec
+	resticSnapshotLatestSize       *prometheus.GaugeVec
+	resticSnapshotLatestTimestamp  *prometheus.GaugeVec
+	resticSnapshotCount            *prometheus.GaugeVec
+	resticSnapshotTotalSize        *prometheus.GaugeVec
+	s3SnapshotErrors               *prometheus.CounterVec
+	s3SnapshotLatestDuration       *prometheus.GaugeVec
+	s3SnapshotLatestUploadDuration *prometheus.GaugeVec
+	s3SnapshotLatestSize           *prometheus.GaugeVec
+	s3SnapshotLatestTimestamp      *prometheus.GaugeVec
+	s3SnapshotCount                *prometheus.GaugeVec
+	s3SnapshotTotalSize            *prometheus.GaugeVec
 }
 
 func NewMetrics() *Metrics {
 	metrics := &Metrics{
-		snapshotsTotal: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: "restic",
-				Subsystem: "repository",
-				Name:      "snapshot_total",
-				Help:      "Number of snapshots per backup name",
+		schedulerErrors: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "backup",
+				Subsystem: "scheduler",
+				Name:      "errors_total",
+				Help:      "Total number of scheduler errors by operation (e.g. restic check, prune, list snapshots)",
 			},
-			[]string{"name"},
+			[]string{"operation"},
 		),
-		snapshotTotalSize: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: "restic",
-				Subsystem: "repository",
-				Name:      "snapshot_total_size_bytes",
-				Help:      "Total size of all snapshots per backup name",
+		resticSnapshotErrors: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "backup",
+				Subsystem: "restic",
+				Name:      "snapshot_errors_total",
+				Help:      "Total number of errors creating restic snapshots per backup name",
 			},
-			[]string{"name"},
+			[]string{"backup_name"},
 		),
-		snapshotLatestSize: prometheus.NewGaugeVec(
+		resticSnapshotLatestDuration: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace: "restic",
-				Subsystem: "repository",
+				Namespace: "backup",
+				Subsystem: "restic",
+				Name:      "snapshot_latest_duration_seconds",
+				Help:      "Duration in seconds of the latest restic snapshot per backup name",
+			},
+			[]string{"backup_name"},
+		),
+		resticSnapshotLatestSize: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "backup",
+				Subsystem: "restic",
 				Name:      "snapshot_latest_size_bytes",
-				Help:      "Size of the latest snapshot per backup name",
+				Help:      "Size in bytes of the latest restic snapshot per backup name",
 			},
-			[]string{"name"},
+			[]string{"backup_name"},
 		),
-		snapshotLatestTime: prometheus.NewGaugeVec(
+		resticSnapshotLatestTimestamp: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace: "restic",
-				Subsystem: "repository",
-				Name:      "snapshot_latest_time",
-				Help:      "Timestamp of the latest snapshot per backup name",
+				Namespace: "backup",
+				Subsystem: "restic",
+				Name:      "snapshot_latest_timestamp_seconds",
+				Help:      "Unix timestamp of the latest restic snapshot per backup name",
 			},
-			[]string{"name"},
+			[]string{"backup_name"},
 		),
-		s3Total: prometheus.NewGaugeVec(
+		resticSnapshotCount: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace: "restic",
+				Namespace: "backup",
+				Subsystem: "restic",
+				Name:      "snapshot_count",
+				Help:      "Total number of restic snapshots per backup name",
+			},
+			[]string{"backup_name"},
+		),
+		resticSnapshotTotalSize: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "backup",
+				Subsystem: "restic",
+				Name:      "snapshot_total_size_bytes",
+				Help:      "Total size in bytes of all restic snapshots per backup name",
+			},
+			[]string{"backup_name"},
+		),
+		s3SnapshotErrors: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "backup",
 				Subsystem: "s3",
-				Name:      "total",
-				Help:      "Number of snapshot dumps in s3 per backup name",
+				Name:      "snapshot_errors_total",
+				Help:      "Total number of errors creating or uploading S3 snapshots per backup name",
 			},
-			[]string{"name"},
+			[]string{"backup_name"},
 		),
-		s3TotalSize: prometheus.NewGaugeVec(
+		s3SnapshotLatestDuration: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace: "restic",
+				Namespace: "backup",
 				Subsystem: "s3",
-				Name:      "total_size_bytes",
-				Help:      "Total size of all snapshot dumps in s3 per backup name",
+				Name:      "snapshot_latest_duration_seconds",
+				Help:      "Duration in seconds of the latest S3 snapshot dump per backup name",
 			},
-			[]string{"name"},
+			[]string{"backup_name"},
 		),
-		s3LatestSize: prometheus.NewGaugeVec(
+		s3SnapshotLatestUploadDuration: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace: "restic",
+				Namespace: "backup",
 				Subsystem: "s3",
-				Name:      "latest_size_bytes",
-				Help:      "Size of the latest snapshot dump in s3 per backup name",
+				Name:      "snapshot_latest_upload_duration_seconds",
+				Help:      "Duration in seconds of the latest S3 snapshot upload per backup name",
 			},
-			[]string{"name"},
+			[]string{"backup_name"},
 		),
-		s3LatestTime: prometheus.NewGaugeVec(
+		s3SnapshotLatestSize: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Namespace: "restic",
+				Namespace: "backup",
 				Subsystem: "s3",
-				Name:      "latest_time",
-				Help:      "Timestamp of the latest snapshot dump in s3 per backup name",
+				Name:      "snapshot_latest_size_bytes",
+				Help:      "Size in bytes of the latest S3 snapshot dump per backup name",
 			},
-			[]string{"name"},
+			[]string{"backup_name"},
 		),
-	}
+		s3SnapshotLatestTimestamp: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "backup",
+				Subsystem: "s3",
+				Name:      "snapshot_latest_timestamp_seconds",
+				Help:      "Unix timestamp of the latest S3 snapshot dump per backup name",
+			},
+			[]string{"backup_name"},
+		),
+		s3SnapshotCount: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "backup",
+				Subsystem: "s3",
+				Name:      "snapshot_count",
+				Help:      "Total number of S3 snapshots per backup name",
+			},
+			[]string{"backup_name"},
+		),
+		s3SnapshotTotalSize: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "backup",
+				Subsystem: "s3",
+				Name:      "snapshot_total_size_bytes",
+				Help:      "Total size in bytes of all S3 snapshots per backup name",
+			},
+			[]string{"backup_name"},
+		)}
+
+	metrics.schedulerErrors.WithLabelValues(string(SchedulerErrorResticCheck)).Add(0)
+	metrics.schedulerErrors.WithLabelValues(string(SchedulerErrorResticForgetAndPrune)).Add(0)
+	metrics.schedulerErrors.WithLabelValues(string(SchedulerErrorResticListSnapshots)).Add(0)
+	metrics.schedulerErrors.WithLabelValues(string(SchedulerErrorResticGetSnapshotStats)).Add(0)
+	metrics.schedulerErrors.WithLabelValues(string(SchedulerErrorS3ListObjects)).Add(0)
 
 	return metrics
 }
 
+func (m *Metrics) AddSchedulerError(operation SchedulerError) {
+	m.schedulerErrors.WithLabelValues(string(operation)).Inc()
+}
+
+func (m *Metrics) AddResticErrorByBackupName(name string) {
+	m.resticSnapshotErrors.WithLabelValues(name).Inc()
+}
+
 func (m *Metrics) SetResticStatsByBackupName(name string, count int, totalSize int64, latestSize int64, latestTime float64) {
-	m.snapshotsTotal.WithLabelValues(name).Set(float64(count))
-	m.snapshotTotalSize.WithLabelValues(name).Set(float64(totalSize))
-	m.snapshotLatestSize.WithLabelValues(name).Set(float64(latestSize))
-	m.snapshotLatestTime.WithLabelValues(name).Set(latestTime)
+	m.resticSnapshotCount.WithLabelValues(name).Set(float64(count))
+	m.resticSnapshotTotalSize.WithLabelValues(name).Set(float64(totalSize))
+	m.resticSnapshotLatestSize.WithLabelValues(name).Set(float64(latestSize))
+	m.resticSnapshotLatestTimestamp.WithLabelValues(name).Set(latestTime)
+}
+
+func (m *Metrics) SetResticDurationByBackupName(name string, duration float64) {
+	m.resticSnapshotLatestDuration.WithLabelValues(name).Set(duration)
+}
+
+func (m *Metrics) AddS3ErrorByBackupName(name string) {
+	m.s3SnapshotErrors.WithLabelValues(name).Inc()
 }
 
 func (m *Metrics) SetS3StatsByBackupName(name string, count int, totalSize int64, latestSize int64, latestTime float64) {
-	m.s3Total.WithLabelValues(name).Set(float64(count))
-	m.s3TotalSize.WithLabelValues(name).Set(float64(totalSize))
-	m.s3LatestSize.WithLabelValues(name).Set(float64(latestSize))
-	m.s3LatestTime.WithLabelValues(name).Set(latestTime)
+	m.s3SnapshotCount.WithLabelValues(name).Set(float64(count))
+	m.s3SnapshotTotalSize.WithLabelValues(name).Set(float64(totalSize))
+	m.s3SnapshotLatestSize.WithLabelValues(name).Set(float64(latestSize))
+	m.s3SnapshotLatestTimestamp.WithLabelValues(name).Set(latestTime)
+}
+
+func (m *Metrics) SetS3DurationByBackupName(name string, duration float64, uploadDuration float64) {
+	m.s3SnapshotLatestDuration.WithLabelValues(name).Set(duration)
+	m.s3SnapshotLatestUploadDuration.WithLabelValues(name).Set(uploadDuration)
 }
 
 func (m *Metrics) GetMetricsHandler() http.Handler {
-
 	var r = prometheus.NewRegistry()
 	r.MustRegister(
-		m.snapshotsTotal,
-		m.snapshotTotalSize,
-		m.snapshotLatestSize,
-		m.snapshotLatestTime,
-		m.s3Total,
-		m.s3TotalSize,
-		m.s3LatestSize,
-		m.s3LatestTime,
+		m.schedulerErrors,
+		m.resticSnapshotErrors,
+		m.resticSnapshotCount,
+		m.resticSnapshotTotalSize,
+		m.resticSnapshotLatestSize,
+		m.resticSnapshotLatestTimestamp,
+		m.resticSnapshotLatestDuration,
+		m.s3SnapshotErrors,
+		m.s3SnapshotCount,
+		m.s3SnapshotTotalSize,
+		m.s3SnapshotLatestSize,
+		m.s3SnapshotLatestTimestamp,
+		m.s3SnapshotLatestDuration,
+		m.s3SnapshotLatestUploadDuration,
 	)
 
 	handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})

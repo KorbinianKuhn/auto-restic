@@ -113,46 +113,60 @@ age -d -o your-backup-name.tar.gz your-backup-name.tar.gz.age
 Prometheus metrics are exported under [localhost:2112/metrics](localhost:2112/metrics)
 
 ```yaml
-# HELP restic_repository_snapshot_latest_size_bytes Size of the latest snapshot per backup name
-# TYPE restic_repository_snapshot_latest_size_bytes gauge
-restic_repository_snapshot_latest_size_bytes{name="mongodb-dump"} 1240
-restic_repository_snapshot_latest_size_bytes{name="production"} 0
-restic_repository_snapshot_latest_size_bytes{name="staging"} 0
-# HELP restic_repository_snapshot_latest_time Timestamp of the latest snapshot per backup name
-# TYPE restic_repository_snapshot_latest_time gauge
-restic_repository_snapshot_latest_time{name="mongodb-dump"} 1.749808336e+09
-restic_repository_snapshot_latest_time{name="production"} 1.7568957e+09
-restic_repository_snapshot_latest_time{name="staging"} 1.7568957e+09
-# HELP restic_repository_snapshot_total Number of snapshots per backup name
-# TYPE restic_repository_snapshot_total gauge
-restic_repository_snapshot_total{name="mongodb-dump"} 2
-restic_repository_snapshot_total{name="production"} 4
-restic_repository_snapshot_total{name="staging"} 2
-# HELP restic_repository_snapshot_total_size_bytes Total size of all snapshots per backup name
-# TYPE restic_repository_snapshot_total_size_bytes gauge
-restic_repository_snapshot_total_size_bytes{name="mongodb-dump"} 2527
-restic_repository_snapshot_total_size_bytes{name="production"} 2180
-restic_repository_snapshot_total_size_bytes{name="staging"} 1111
-# HELP restic_s3_latest_size_bytes Size of the latest snapshot dump in s3 per backup name
-# TYPE restic_s3_latest_size_bytes gauge
-restic_s3_latest_size_bytes{name="mongodb-dump"} 711
-restic_s3_latest_size_bytes{name="production"} 395
-restic_s3_latest_size_bytes{name="staging"} 389
-# HELP restic_s3_latest_time Timestamp of the latest snapshot dump in s3 per backup name
-# TYPE restic_s3_latest_time gauge
-restic_s3_latest_time{name="mongodb-dump"} 1.756895707e+09
-restic_s3_latest_time{name="production"} 1.756895705e+09
-restic_s3_latest_time{name="staging"} 1.756895706e+09
-# HELP restic_s3_total Number of snapshot dumps in s3 per backup name
-# TYPE restic_s3_total gauge
-restic_s3_total{name="mongodb-dump"} 3
-restic_s3_total{name="production"} 3
-restic_s3_total{name="staging"} 3
-# HELP restic_s3_total_size_bytes Total size of all snapshot dumps in s3 per backup name
-# TYPE restic_s3_total_size_bytes gauge
-restic_s3_total_size_bytes{name="mongodb-dump"} 2133
-restic_s3_total_size_bytes{name="production"} 1185
-restic_s3_total_size_bytes{name="staging"} 1167
+# HELP backup_restic_snapshot_count Total number of restic snapshots per backup name
+# TYPE backup_restic_snapshot_count gauge
+backup_restic_snapshot_count{backup_name="mongodb-dump"} 2
+backup_restic_snapshot_count{backup_name="production"} 7
+backup_restic_snapshot_count{backup_name="staging"} 5
+# HELP backup_restic_snapshot_errors_total Total number of errors creating restic snapshots per backup name
+# TYPE backup_restic_snapshot_errors_total counter
+backup_restic_snapshot_errors_total{backup_name="mongodb-dump"} 1
+# HELP backup_restic_snapshot_latest_duration_seconds Duration in seconds of the latest restic snapshot per backup name
+# TYPE backup_restic_snapshot_latest_duration_seconds gauge
+backup_restic_snapshot_latest_duration_seconds{backup_name="production"} 0.78878625
+backup_restic_snapshot_latest_duration_seconds{backup_name="staging"} 0.777218083
+# HELP backup_restic_snapshot_latest_size_bytes Size in bytes of the latest restic snapshot per backup name
+# TYPE backup_restic_snapshot_latest_size_bytes gauge
+backup_restic_snapshot_latest_size_bytes{backup_name="mongodb-dump"} 1240
+backup_restic_snapshot_latest_size_bytes{backup_name="production"} 0
+backup_restic_snapshot_latest_size_bytes{backup_name="staging"} 0
+# HELP backup_restic_snapshot_latest_timestamp_seconds Unix timestamp of the latest restic snapshot per backup name
+# TYPE backup_restic_snapshot_latest_timestamp_seconds gauge
+backup_restic_snapshot_latest_timestamp_seconds{backup_name="mongodb-dump"} 1.749808336e+09
+backup_restic_snapshot_latest_timestamp_seconds{backup_name="production"} 1.75707894e+09
+backup_restic_snapshot_latest_timestamp_seconds{backup_name="staging"} 1.75707894e+09
+# HELP backup_restic_snapshot_total_size_bytes Total size in bytes of all restic snapshots per backup name
+# TYPE backup_restic_snapshot_total_size_bytes gauge
+backup_restic_snapshot_total_size_bytes{backup_name="mongodb-dump"} 2527
+backup_restic_snapshot_total_size_bytes{backup_name="production"} 3244
+backup_restic_snapshot_total_size_bytes{backup_name="staging"} 2172
+# HELP backup_s3_snapshot_count Total number of S3 snapshots per backup name
+# TYPE backup_s3_snapshot_count gauge
+backup_s3_snapshot_count{backup_name="mongodb-dump"} 7
+backup_s3_snapshot_count{backup_name="production"} 8
+backup_s3_snapshot_count{backup_name="staging"} 8
+# HELP backup_s3_snapshot_latest_size_bytes Size in bytes of the latest S3 snapshot dump per backup name
+# TYPE backup_s3_snapshot_latest_size_bytes gauge
+backup_s3_snapshot_latest_size_bytes{backup_name="mongodb-dump"} 711
+backup_s3_snapshot_latest_size_bytes{backup_name="production"} 395
+backup_s3_snapshot_latest_size_bytes{backup_name="staging"} 389
+# HELP backup_s3_snapshot_latest_timestamp_seconds Unix timestamp of the latest S3 snapshot dump per backup name
+# TYPE backup_s3_snapshot_latest_timestamp_seconds gauge
+backup_s3_snapshot_latest_timestamp_seconds{backup_name="mongodb-dump"} 1.75707841e+09
+backup_s3_snapshot_latest_timestamp_seconds{backup_name="production"} 1.757078405e+09
+backup_s3_snapshot_latest_timestamp_seconds{backup_name="staging"} 1.757078407e+09
+# HELP backup_s3_snapshot_total_size_bytes Total size in bytes of all S3 snapshots per backup name
+# TYPE backup_s3_snapshot_total_size_bytes gauge
+backup_s3_snapshot_total_size_bytes{backup_name="mongodb-dump"} 4266
+backup_s3_snapshot_total_size_bytes{backup_name="production"} 2765
+backup_s3_snapshot_total_size_bytes{backup_name="staging"} 2723
+# HELP backup_scheduler_errors_total Total number of scheduler errors by operation (e.g. restic check, prune, list snapshots)
+# TYPE backup_scheduler_errors_total counter
+backup_scheduler_errors_total{operation="restic_check"} 0
+backup_scheduler_errors_total{operation="restic_forget_and_prune"} 0
+backup_scheduler_errors_total{operation="restic_get_snapshot_stats"} 0
+backup_scheduler_errors_total{operation="restic_list_snapshots"} 0
+backup_scheduler_errors_total{operation="s3_list_objects"} 0
 ```
 
 ## Grafana

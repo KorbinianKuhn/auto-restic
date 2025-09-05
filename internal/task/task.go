@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"filippo.io/age"
 	"github.com/korbiniankuhn/auto-restic/internal/config"
@@ -22,6 +23,7 @@ func ResticCheck(m *metrics.Metrics, r restic.Restic) {
 	slog.Info("run restic check")
 	err := r.Check()
 	if err != nil {
+		m.AddSchedulerError(metrics.SchedulerErrorResticCheck)
 		slog.Error("failed to check restic repository", "error", err)
 	} else {
 		slog.Info("restic check completed")
@@ -32,6 +34,7 @@ func ForgetAndPrune(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	slog.Info("run restic forget and prune")
 	err := r.ForgetAndPrune(c.Restic.KeepDaily, c.Restic.KeepWeekly, c.Restic.KeepMonthly)
 	if err != nil {
+		m.AddSchedulerError(metrics.SchedulerErrorResticForgetAndPrune)
 		slog.Error("failed to forget and prune restic repository", "error", err)
 	} else {
 		slog.Info("restic forget and prune completed")
@@ -46,11 +49,13 @@ func ForgetAndPrune(c config.Config, m *metrics.Metrics, r restic.Restic) {
 func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	slog.Info("starting restic backups")
 	for _, backup := range c.Backups {
+		startedAt := time.Now()
 		if backup.PreCommand != "" {
 			slog.Info("run pre backup command", "command", backup.PreCommand)
 			cmd := exec.Command("sh", "-c", backup.PreCommand)
 			err := cmd.Run()
 			if err != nil {
+				m.AddResticErrorByBackupName(backup.Name)
 				slog.Error("failed to run pre backup command", "command", backup.PreCommand, "error", err)
 				continue
 			}
@@ -59,6 +64,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 		slog.Info("create restic snapshot", "paths", backup.Path)
 		err := r.BackupDirectory(backup.Name, backup.Path)
 		if err != nil {
+			m.AddResticErrorByBackupName(backup.Name)
 			slog.Error("failed to backup directory", "directory", backup.Path, "error", err)
 			continue
 		}
@@ -68,10 +74,14 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 			cmd := exec.Command("sh", "-c", backup.PostCommand)
 			err := cmd.Run()
 			if err != nil {
+				m.AddResticErrorByBackupName(backup.Name)
 				slog.Error("failed to run post backup command", "command", backup.PostCommand, "error", err)
 				continue
 			}
 		}
+		slog.Info("finished restic snapshot", "paths", backup.Path)
+		duration := time.Since(startedAt)
+		m.SetResticDurationByBackupName(backup.Name, duration.Seconds())
 	}
 
 	err := updateResticMetrics(c, m, r)
@@ -85,6 +95,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) error {
 	snapshots, err := r.ListSnapshots()
 	if err != nil {
+		m.AddSchedulerError(metrics.SchedulerErrorResticListSnapshots)
 		return fmt.Errorf("failed to list snapshots: %w", err)
 	}
 
@@ -111,6 +122,7 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 	for name := range snapshotBackupNames {
 		stats, err := r.GetSnapshotStatsByName(name)
 		if err != nil {
+			m.AddSchedulerError(metrics.SchedulerErrorResticGetSnapshotStats)
 			return fmt.Errorf("failed to get snapshot stats: %w", err)
 		}
 		totalSize[name] += int64(stats.TotalSize)
@@ -216,43 +228,19 @@ func createEncryptedDump(r restic.Restic, snapshot, path string, passphrase stri
 	return nil
 }
 
-func createAndUploadArchive(r restic.Restic, s *s3.S3, snapshot restic.Snapshot, passphrase string) error {
-	archivePath := filepath.Join(os.TempDir(), snapshot.Name+".tar.gz.age")
-
-	slog.Info("creating temporary archive file", "snapshot", snapshot.Name, "path", archivePath)
-
-	archiveFile, err := os.Create(archivePath)
-	if err != nil {
-		slog.Error("failed to create temporary archive file", "snapshot", snapshot.Name, "error", err)
-	}
-
-	archiveFile.Close()
-	defer os.Remove(archivePath)
-
-	err = createEncryptedDump(r, snapshot.ID, archivePath, passphrase)
-	if err != nil {
-		return fmt.Errorf("failed to create encrypted dump: %w", err)
-	}
-	slog.Info("created encrypted snapshot", "snapshot", snapshot.Name)
-
-	err = s.UploadFile(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to upload snapshot to s3: %w", err)
-	}
-
-	return nil
-}
-
 func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 	slog.Info("creating s3 backups")
 
 	snapshots, err := r.ListLatestSnapshots()
 	if err != nil {
+		m.AddSchedulerError(metrics.SchedulerErrorResticListSnapshots)
 		slog.Error("failed to list latest snapshots", "error", err)
 		return
 	}
 
 	for _, backup := range c.Backups {
+		startedAt := time.Now()
+
 		snapshot := restic.Snapshot{}
 		for _, s := range snapshots {
 			if s.Name == backup.Name {
@@ -262,16 +250,43 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 		}
 
 		if snapshot.ID == "" {
+			m.AddS3ErrorByBackupName(backup.Name)
 			slog.Warn("no snapshot found for backup", "backup", backup.Name)
 			continue
 		}
 
-		err := createAndUploadArchive(r, s3, snapshot, c.S3.Passphrase)
+		archivePath := filepath.Join(os.TempDir(), snapshot.Name+".tar.gz.age")
+
+		slog.Info("creating temporary archive file", "snapshot", snapshot.Name, "path", archivePath)
+
+		archiveFile, err := os.Create(archivePath)
 		if err != nil {
-			slog.Error("failed to create and upload archive", "snapshot", snapshot.Name, "error", err)
+			m.AddS3ErrorByBackupName(backup.Name)
+			slog.Error("failed to create temporary archive file", "snapshot", snapshot.Name, "error", err)
+		}
+		archiveFile.Close()
+
+		err = createEncryptedDump(r, snapshot.ID, archivePath, c.S3.Passphrase)
+		if err != nil {
+			m.AddS3ErrorByBackupName(backup.Name)
+			slog.Error("failed to create encrypted dump", "snapshot", snapshot.Name, "error", err)
+			os.Remove(archivePath)
+			continue
+		}
+		slog.Info("created encrypted snapshot", "snapshot", snapshot.Name)
+
+		uploadStartedAt := time.Now()
+		err = s3.UploadFile(archivePath)
+		if err != nil {
+			m.AddS3ErrorByBackupName(backup.Name)
+			slog.Error("failed to upload snapshot to s3", "snapshot", snapshot.Name, "error", err)
+			os.Remove(archivePath)
 			continue
 		}
 
+		os.Remove(archivePath)
+
+		m.SetS3DurationByBackupName(backup.Name, time.Since(startedAt).Seconds(), time.Since(uploadStartedAt).Seconds())
 		slog.Info("uploaded snapshot to s3", "snapshot", snapshot.Name)
 	}
 
@@ -298,6 +313,7 @@ func updateS3Metrics(c config.Config, m *metrics.Metrics, s *s3.S3) error {
 
 	objects, err := s.ListObjects()
 	if err != nil {
+		m.AddSchedulerError(metrics.SchedulerErrorS3ListObjects)
 		return fmt.Errorf("failed to list s3 objects: %w", err)
 	}
 
