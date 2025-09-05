@@ -14,12 +14,12 @@ RUN go build -o cli ./cmd/cli/main.go
 
 FROM alpine:latest
 
-WORKDIR /hetzner-restic
+WORKDIR /auto-restic
 
 # Install restic and docker CLI
 RUN apk add --no-cache restic docker-cli
 
 COPY --from=builder /app/server .
-COPY --from=builder /app/cli ./hetzner-restic
+COPY --from=builder /app/cli .
 
-ENTRYPOINT ["/app/server"]
+ENTRYPOINT ["/auto-restic/server"]

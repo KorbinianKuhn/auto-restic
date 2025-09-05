@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 
 	"filippo.io/age"
-	"github.com/korbiniankuhn/hetzner-restic/internal/config"
-	"github.com/korbiniankuhn/hetzner-restic/internal/metrics"
-	"github.com/korbiniankuhn/hetzner-restic/internal/restic"
-	"github.com/korbiniankuhn/hetzner-restic/internal/s3"
+	"github.com/korbiniankuhn/auto-restic/internal/config"
+	"github.com/korbiniankuhn/auto-restic/internal/metrics"
+	"github.com/korbiniankuhn/auto-restic/internal/restic"
+	"github.com/korbiniankuhn/auto-restic/internal/s3"
 )
 
 func ResticCheck(m *metrics.Metrics, r restic.Restic) {

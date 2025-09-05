@@ -13,9 +13,9 @@ import (
 	"text/tabwriter"
 
 	"filippo.io/age"
-	"github.com/korbiniankuhn/hetzner-restic/internal/config"
-	"github.com/korbiniankuhn/hetzner-restic/internal/restic"
-	"github.com/korbiniankuhn/hetzner-restic/internal/s3"
+	"github.com/korbiniankuhn/auto-restic/internal/config"
+	"github.com/korbiniankuhn/auto-restic/internal/restic"
+	"github.com/korbiniankuhn/auto-restic/internal/s3"
 	"github.com/spf13/cobra"
 )
 
@@ -61,8 +61,8 @@ func initS3(c config.Config) *s3.S3 {
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "hetzner-restic",
-		Short: "Hetzner Restic backup tool",
+		Use:   "auto-restic",
+		Short: "AutoRestic backup tool",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			c := initConfigAndLogging()
 			session := &Session{Config: c}

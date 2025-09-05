@@ -1,9 +1,4 @@
-# Hetzner Restic
-
-- EasyBackup
-- BackupWORM
-- ResticWORM
-- AutoRestic
+# AutoRestic
 
 Schedule and monitor Restic backups and S3 snapshots with client-side encryption and WORM (Write Once Read Many) protection.
 
@@ -66,14 +61,14 @@ docker-compose.yml
 
 ```yaml
 services:
-  hetzner-restic:
-    image: ghcr.io/korbiniankuhn/hetzner-restic:1.0.0
-    container_name: hetzner-restic
+  auto-restic:
+    image: ghcr.io/korbiniankuhn/auto-restic:1.0.0
+    container_name: auto-restic
     ports:
       - 127.0.0.1:2112:2112
     volumes:
-      - ./.env:/hetzner-restic/.env:ro
-      - ./config.yml:/hetzner-restic/config.yml:ro
+      - ./.env:/auto-restic/.env:ro
+      - ./config.yml:/auto-restic/config.yml:ro
       - ./data:/data
       - ./restic:/repository
       - /var/run/docker.sock:/var/run/docker.sock # only required if you run docker commands for pre-post backup scripts
@@ -86,23 +81,23 @@ A CLI is provided to list, remove, and restore backups (restic or S3). The CLI u
 Connect to a running container
 
 ```bash
-docker exec -it hetzner-restic sh
+docker exec -it auto-restic sh
 ```
 
 or start a temporary one:
 
 ```bash
-docker compose run --entrypoint "/bin/sh" hetzner-restic
+docker compose run --entrypoint "/bin/sh" auto-restic
 ```
 
-| Command                                                                   | Description                                 |
-| ------------------------------------------------------------------------- | ------------------------------------------- |
-| hetzner-restic restic ls                                                  | List all local backups and snapshots        |
-| hetzner-restic restic rm --name ""                                        | Remove all snapshots of a backup            |
-| hetzner-restic restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
-| hetzner-restic s3 ls                                                      | List all S3 backups and versions            |
-| hetzner-restic s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
-| hetzner-restic s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
+| Command                                                          | Description                                 |
+| ---------------------------------------------------------------- | ------------------------------------------- |
+| ./cli restic ls                                                  | List all local backups and snapshots        |
+| ./cli restic rm --name ""                                        | Remove all snapshots of a backup            |
+| ./cli restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
+| ./cli s3 ls                                                      | List all S3 backups and versions            |
+| ./cli s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
+| ./cli s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
 
 ### S3 (Disaster Recovery)
 
@@ -164,7 +159,7 @@ restic_s3_total_size_bytes{name="staging"} 1167
 
 A prebuilt dashboard is [here](dashboard.json)
 
-![Screenshot of the Grafana dashboard for HetznerRestic](dashboard.png)
+![Screenshot of the Grafana dashboard for AutoRestic](dashboard.png)
 
 ## Credits
 

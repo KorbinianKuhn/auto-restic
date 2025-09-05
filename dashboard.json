@@ -620,7 +620,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=\"hetzner-restic\",instance=~\"$instance\"}",
+          "expr": "{container=\"auto-restic\",instance=~\"$instance\"}",
           "queryType": "range",
           "refId": "A"
         }

@@ -1,4 +1,4 @@
-module github.com/korbiniankuhn/hetzner-restic
+module github.com/korbiniankuhn/auto-restic
 
 go 1.23.0
 
