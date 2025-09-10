@@ -29,15 +29,973 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "fixedColor": "blue",
-            "mode": "fixed"
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup Age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "from": 0,
+                      "result": {
+                        "color": "blue",
+                        "index": 0,
+                        "text": "up-to-date"
+                      },
+                      "to": 86400
+                    },
+                    "type": "range"
+                  },
+                  {
+                    "options": {
+                      "from": 86401,
+                      "result": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "outdated"
+                      }
+                    },
+                    "type": "range"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup Count"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "blue",
+                        "index": 0,
+                        "text": "as expected"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "from": 1,
+                      "result": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "invalid"
+                      }
+                    },
+                    "type": "range"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup Errors"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "blue",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 7,
+        "x": 0,
+        "y": 0
+      },
+      "id": 17,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "time() - min(backup_restic_snapshot_latest_timestamp_seconds{instance=~\"$instance\"})",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Backup Age",
+          "range": false,
+          "refId": "latest"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "count(backup_restic_snapshot_count{instance=~\"$instance\"} < 14) or vector(0)",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Backup Count",
+          "range": false,
+          "refId": "invalid_count"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "increase(backup_restic_snapshot_errors_total{instance=~\"$instance\"}[7d]) or vector(0)",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Backup Errors",
+          "range": false,
+          "refId": "errors"
+        }
+      ],
+      "title": "Restic",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "aepgk6igp92wwd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup Age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "from": 0,
+                      "result": {
+                        "color": "purple",
+                        "index": 0,
+                        "text": "up-to-date"
+                      },
+                      "to": 86400
+                    },
+                    "type": "range"
+                  },
+                  {
+                    "options": {
+                      "from": 86401,
+                      "result": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "outdated"
+                      }
+                    },
+                    "type": "range"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup Count"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "purple",
+                        "index": 0,
+                        "text": "as expected"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "from": 1,
+                      "result": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "invalid"
+                      }
+                    },
+                    "type": "range"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Backup Errors"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "purple",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 7,
+        "x": 7,
+        "y": 0
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "time() - min(backup_s3_snapshot_latest_timestamp_seconds{instance=~\"$instance\"})",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Backup Age",
+          "range": false,
+          "refId": "latest"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "count(backup_s3_snapshot_count{instance=~\"$instance\"} != 7)",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Backup Count",
+          "range": false,
+          "refId": "invalid_count"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "increase(backup_s3_snapshot_errors_total{instance=~\"$instance\"}[30d]) or vector(0)",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "Backup Errors",
+          "range": false,
+          "refId": "errors"
+        }
+      ],
+      "title": "S3",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "aepgk6igp92wwd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 10,
+        "x": 14,
+        "y": 0
+      },
+      "id": 7,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "backup_scheduler_errors_total",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "{{operation}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Scheduler Errors",
+      "transformations": [
+        {
+          "id": "joinByLabels",
+          "options": {
+            "value": "operation"
+          }
+        }
+      ],
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "aepgk6igp92wwd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-text"
+            },
+            "filterable": false,
+            "inspect": false,
+            "width": 130
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Name"
+            },
+            "properties": [
+              {
+                "id": "custom.width"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Count (Restic)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": 0
+                    },
+                    {
+                      "color": "green",
+                      "value": 14
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Latest (Restic)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdurations"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "#EAB839",
+                      "value": 86400
+                    },
+                    {
+                      "color": "red",
+                      "value": 89000
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Latest (S3)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dtdurations"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 86400
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Count (S3)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": 0
+                    },
+                    {
+                      "color": "green",
+                      "value": 6
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 7
+                    },
+                    {
+                      "color": "red",
+                      "value": 8
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Errors/"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 9,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "backup_restic_snapshot_count{instance=~\"$instance\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "restic_count"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "backup_s3_snapshot_count{instance=~\"$instance\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "s3_count"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "time() - backup_restic_snapshot_latest_timestamp_seconds{instance=~\"$instance\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "restic_latest_time"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "time() - backup_s3_snapshot_latest_timestamp_seconds{instance=~\"$instance\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "s3_latest_time"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "max by (backup_name) (\n  increase(backup_restic_snapshot_errors_total{instance=~\"$instance\"}[7d])\n  or on(backup_name)\n  (backup_restic_snapshot_count{instance=~\"$instance\"} * 0)\n)",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "restic_errors"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "max by (backup_name) (\n  increase(backup_s3_snapshot_errors_total{instance=~\"$instance\"}[30d])\n  or on(backup_name)\n  (backup_s3_snapshot_count{instance=~\"$instance\"} * 0)\n)",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "s3_errors"
+        }
+      ],
+      "title": "Status",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "backup_name",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "total_errors",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #s3_errors",
+                "Value #restic_errors"
+              ],
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Value #restic_latest_time"
+              }
+            ]
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "total_errors"
+              }
+            ]
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "byVariable": false,
+            "include": {
+              "names": [
+                "backup_name",
+                "Value #restic_count",
+                "Value #s3_count",
+                "Value #restic_latest_time",
+                "Value #s3_latest_time",
+                "Value #restic_errors",
+                "Value #s3_errors"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {
+              "Value #restic_count": 2,
+              "Value #restic_errors": 3,
+              "Value #restic_latest_time": 1,
+              "Value #s3_count": 5,
+              "Value #s3_errors": 6,
+              "Value #s3_latest_time": 4,
+              "backup_name": 0
+            },
+            "renameByName": {
+              "Value #count": "Count",
+              "Value #latest_duration": "Duration",
+              "Value #latest_size": "Latest Size",
+              "Value #latest_time": "Latest Time",
+              "Value #restic_count": "Count (Restic)",
+              "Value #restic_duration": "Duration (Restic)",
+              "Value #restic_errors": "Errors (Restic)",
+              "Value #restic_latest_size": "Size (Restic)",
+              "Value #restic_latest_time": "Latest (Restic)",
+              "Value #s3_count": "Count (S3)",
+              "Value #s3_duration": "Duration (S3)",
+              "Value #s3_errors": "Errors (S3)",
+              "Value #s3_latest_duration": "S3 Duration",
+              "Value #s3_latest_size": "Size (S3)",
+              "Value #s3_latest_time": "Latest (S3)",
+              "Value #s3_total_size": "S3 Total Size",
+              "Value #s3_upload_duration": "Upload (S3)",
+              "Value #total_size": "Total Size",
+              "backup_name": "Name",
+              "backup_name 1": "Backup Name",
+              "instance": "Instance",
+              "instance 1": "Instance",
+              "name": "Name",
+              "name 1": "Name"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "aepgk6igp92wwd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 9,
+        "x": 0,
+        "y": 12
+      },
+      "id": 13,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "top",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "text"
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sort_desc(topk (5, backup_restic_snapshot_total_size_bytes > 0))",
+          "instant": true,
+          "legendFormat": "{{backup_name}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Largest (Restic)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "aepgk6igp92wwd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
               }
             ]
           },
@@ -86,19 +1044,21 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 0
+        "w": 6,
+        "x": 9,
+        "y": 12
       },
       "id": 4,
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "justifyMode": "center",
+        "orientation": "vertical",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -106,7 +1066,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -115,7 +1075,8 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(restic_repository_snapshot_total_size_bytes{instance=~\"$instance\"})",
+          "expr": "sum(backup_restic_snapshot_total_size_bytes{instance=~\"$instance\"})",
+          "format": "time_series",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -128,7 +1089,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(restic_s3_total_size_bytes{instance=~\"$instance\"})",
+          "expr": "sum(backup_s3_snapshot_total_size_bytes{instance=~\"$instance\"})",
           "hide": false,
           "instant": true,
           "legendFormat": "__auto",
@@ -149,12 +1110,14 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "purple",
+                "value": 0
               }
             ]
           },
@@ -164,11 +1127,11 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 0
+        "w": 9,
+        "x": 15,
+        "y": 12
       },
-      "id": 5,
+      "id": 14,
       "options": {
         "displayMode": "gradient",
         "legend": {
@@ -180,30 +1143,32 @@
         "maxVizHeight": 300,
         "minVizHeight": 16,
         "minVizWidth": 8,
-        "namePlacement": "auto",
+        "namePlacement": "top",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
         "showUnfilled": true,
         "sizing": "auto",
-        "valueMode": "color"
+        "valueMode": "text"
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sort_desc(topk (5, restic_repository_snapshot_latest_size_bytes > 0))",
+          "expr": "sort_desc(topk (5, backup_s3_snapshot_total_size_bytes > 0))",
           "instant": true,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{backup_name}}",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Fastest growing",
+      "title": "Largest (S3)",
       "type": "bargauge"
     },
     {
@@ -219,154 +1184,27 @@
           "custom": {
             "align": "auto",
             "cellOptions": {
-              "type": "auto",
-              "wrapText": false
+              "type": "gauge",
+              "valueDisplayMode": "text"
             },
-            "inspect": false
+            "filterable": false,
+            "inspect": false,
+            "width": 150
           },
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "text",
+                "value": 0
               }
             ]
-          }
+          },
+          "unit": "bytes"
         },
         "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/Time/"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "dateTimeFromNow"
-              },
-              {
-                "id": "custom.align",
-                "value": "center"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/Size/"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bytes"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Count"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 60
-              },
-              {
-                "id": "custom.align",
-                "value": "center"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Total Size"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 90
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Latest Size"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 90
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Latest Time"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 120
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "S3 Count"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 80
-              },
-              {
-                "id": "custom.align",
-                "value": "center"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "S3 Total Size"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 110
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "S3 Latest Size"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 120
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "S3 Latest Time"
-            },
-            "properties": [
-              {
-                "id": "custom.minWidth",
-                "value": 120
-              }
-            ]
-          },
           {
             "matcher": {
               "id": "byName",
@@ -374,8 +1212,53 @@
             },
             "properties": [
               {
-                "id": "custom.minWidth",
-                "value": 300
+                "id": "custom.width"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/Restic/"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "blue",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/S3/"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "purple",
+                      "value": 0
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -385,103 +1268,63 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 19
       },
-      "id": 1,
+      "id": 10,
       "options": {
         "cellHeight": "sm",
         "footer": {
           "countRows": false,
           "enablePagination": false,
           "fields": "",
-          "reducer": ["sum"],
+          "reducer": [
+            "sum"
+          ],
           "show": false
         },
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "aepgk6igp92wwd"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "restic_repository_snapshot_total{instance=~\"$instance\"}",
+          "expr": "backup_restic_snapshot_total_size_bytes{instance=~\"$instance\"}",
           "format": "table",
           "hide": false,
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
-          "refId": "count"
+          "refId": "restic_total_size"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "aepgk6igp92wwd"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "restic_repository_snapshot_total_size_bytes{instance=~\"$instance\"}",
+          "expr": "backup_restic_snapshot_latest_size_bytes{instance=~\"$instance\"}",
           "format": "table",
           "hide": false,
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
-          "refId": "total_size"
+          "refId": "restic_latest_size"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "aepgk6igp92wwd"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "restic_repository_snapshot_latest_size_bytes{instance=~\"$instance\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "latest_size"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "restic_repository_snapshot_latest_time{instance=~\"$instance\"} * 1000",
-          "format": "table",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "latest_time"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "restic_s3_total{instance=~\"$instance\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "s3_count"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "restic_s3_total_size_bytes{instance=~\"$instance\"}",
+          "expr": "backup_s3_snapshot_total_size_bytes{instance=~\"$instance\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -492,41 +1335,52 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "aepgk6igp92wwd"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "restic_s3_latest_size_bytes{instance=~\"$instance\"}",
+          "expr": "backup_s3_snapshot_latest_size_bytes{instance=~\"$instance\"}",
           "format": "table",
           "hide": false,
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
           "refId": "s3_latest_size"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "restic_s3_latest_time{instance=~\"$instance\"} * 1000",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "s3_latest_time"
         }
       ],
-      "title": "Backups",
+      "title": "Size",
       "transformations": [
         {
           "id": "joinByField",
           "options": {
-            "byField": "name",
+            "byField": "backup_name",
             "mode": "outer"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "total_size",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #s3_total_size",
+                "Value #restic_total_size"
+              ],
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "total_size"
+              }
+            ]
           }
         },
         {
@@ -535,15 +1389,10 @@
             "byVariable": false,
             "include": {
               "names": [
-                "name",
-                "instance 1",
-                "Value #count",
-                "Value #total_size",
-                "Value #latest_time",
-                "Value #latest_size",
-                "Value #s3_count",
+                "backup_name",
+                "Value #restic_total_size",
+                "Value #restic_latest_size",
                 "Value #s3_total_size",
-                "Value #s3_latest_time",
                 "Value #s3_latest_size"
               ]
             }
@@ -555,26 +1404,33 @@
             "excludeByName": {},
             "includeByName": {},
             "indexByName": {
-              "Value #count": 2,
-              "Value #latest_size": 4,
-              "Value #latest_time": 5,
-              "Value #s3_count": 6,
-              "Value #s3_latest_size": 8,
-              "Value #s3_latest_time": 9,
-              "Value #s3_total_size": 7,
-              "Value #total_size": 3,
-              "instance 1": 0,
-              "name": 1
+              "Value #restic_latest_size": 2,
+              "Value #restic_total_size": 3,
+              "Value #s3_latest_size": 4,
+              "Value #s3_total_size": 5,
+              "Value #total_size": 1,
+              "backup_name": 0
             },
             "renameByName": {
               "Value #count": "Count",
+              "Value #latest_duration": "Duration",
               "Value #latest_size": "Latest Size",
               "Value #latest_time": "Latest Time",
-              "Value #s3_count": "S3 Count",
-              "Value #s3_latest_size": "S3 Latest Size",
+              "Value #restic_count": "Count (Restic)",
+              "Value #restic_duration": "Duration (Restic)",
+              "Value #restic_latest_size": "Latest Size (Restic)",
+              "Value #restic_total_size": "Total Size (Restic)",
+              "Value #s3_count": "Count (S3)",
+              "Value #s3_duration": "Duration (S3)",
+              "Value #s3_latest_duration": "S3 Duration",
+              "Value #s3_latest_size": "Latest Size (S3)",
               "Value #s3_latest_time": "S3 Latest Time",
-              "Value #s3_total_size": "S3 Total Size",
+              "Value #s3_total_size": "Total Size (S3)",
+              "Value #s3_upload_duration": "Upload (S3)",
               "Value #total_size": "Total Size",
+              "backup_name": "Name",
+              "backup_name 1": "Backup Name",
+              "instance": "Instance",
               "instance 1": "Instance",
               "name": "Name",
               "name 1": "Name"
@@ -583,6 +1439,494 @@
         }
       ],
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "aepgk6igp92wwd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "mode": "gradient",
+              "type": "gauge",
+              "valueDisplayMode": "text"
+            },
+            "filterable": false,
+            "inspect": false,
+            "width": 160
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Name"
+            },
+            "properties": [
+              {
+                "id": "custom.width"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Duration (Restic)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "blue",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total Duration (S3)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "purple",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Upload Duration (S3)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "purple",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "backup_restic_snapshot_latest_duration_seconds{instance=~\"$instance\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "restic_duration"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "backup_s3_snapshot_latest_duration_seconds{instance=~\"$instance\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "s3_duration"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "aepgk6igp92wwd"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "backup_s3_snapshot_latest_upload_duration_seconds{instance=~\"$instance\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "s3_upload_duration"
+        }
+      ],
+      "title": "Duration",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "backup_name",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "total_duration",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #restic_duration",
+                "Value #s3_duration"
+              ],
+              "reducer": "sum"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "total_duration"
+              }
+            ]
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "byVariable": false,
+            "include": {
+              "names": [
+                "backup_name",
+                "Value #restic_duration",
+                "Value #s3_duration",
+                "Value #s3_upload_duration",
+                "Value #s3_latest_size",
+                "Value #restic_latest_size"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {
+              "Value #restic_duration": 1,
+              "Value #restic_latest_size": 2,
+              "Value #s3_duration": 3,
+              "Value #s3_latest_size": 5,
+              "Value #s3_upload_duration": 4,
+              "backup_name": 0
+            },
+            "renameByName": {
+              "Value #count": "Count",
+              "Value #latest_duration": "Duration",
+              "Value #latest_size": "Latest Size",
+              "Value #latest_time": "Latest Time",
+              "Value #restic_duration": "Duration (Restic)",
+              "Value #restic_latest_size": "Size (Restic)",
+              "Value #s3_count": "S3 Count",
+              "Value #s3_duration": "Total Duration (S3)",
+              "Value #s3_latest_duration": "S3 Duration",
+              "Value #s3_latest_size": "Size (S3)",
+              "Value #s3_latest_time": "S3 Latest Time",
+              "Value #s3_total_size": "S3 Total Size",
+              "Value #s3_upload_duration": "Upload Duration (S3)",
+              "Value #total_size": "Total Size",
+              "backup_name": "Name",
+              "backup_name 1": "Backup Name",
+              "instance": "Instance",
+              "instance 1": "Instance",
+              "name": "Name",
+              "name 1": "Name"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 12,
+      "panels": [],
+      "title": "Logs",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "aepgk7zyaz6yoc"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "fatal"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "warn"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "debug"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "logs"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "text",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 11,
+      "maxDataPoints": 100,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "aepgk7zyaz6yoc"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum by (level) (count_over_time({container=\"auto-restic\",instance=~\"$instance\"}\n[$__auto]))\n",
+          "legendFormat": "{{ container }}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Logs volume by level",
+      "transformations": [
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": "Value",
+            "renamePattern": "logs"
+          }
+        }
+      ],
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -597,7 +1941,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 40
       },
       "id": 6,
       "options": {
@@ -607,11 +1951,11 @@
         "prettifyLogMessage": false,
         "showCommonLabels": false,
         "showLabels": false,
-        "showTime": false,
+        "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": false
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -620,7 +1964,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=\"auto-restic\",instance=~\"$instance\"}",
+          "expr": "{container=\"auto-restic\",instance=~\"$instance\"}\n| label_format timestamp=\"{{__timestamp__}}\"\n| line_format `{{.instance}}/{{.container}}: {{__line__}}`",
           "queryType": "range",
           "refId": "A"
         }
@@ -643,29 +1987,46 @@
           "type": "prometheus",
           "uid": "aepgk6igp92wwd"
         },
-        "definition": "label_values(restic_repository_snapshot_total,instance)",
+        "definition": "label_values(backup_restic_snapshot_count,instance)",
         "includeAll": true,
         "label": "Instance",
         "name": "instance",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(restic_repository_snapshot_total,instance)",
+          "query": "label_values(backup_restic_snapshot_count,instance)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
         "type": "query"
+      },
+      {
+        "current": {
+          "text": "24",
+          "value": "24"
+        },
+        "hide": 2,
+        "name": "expected_restic_snapshots_count",
+        "options": [
+          {
+            "selected": true,
+            "text": "24",
+            "value": "24"
+          }
+        ],
+        "query": "24",
+        "type": "custom"
       }
     ]
   },
   "time": {
-    "from": "now-12h",
+    "from": "now-24h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Backups",
   "uid": "injszgx",
-  "version": 15
+  "version": 55
 }
