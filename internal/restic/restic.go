@@ -63,8 +63,16 @@ func (r Restic) init() error {
 	return nil
 }
 
-func (r Restic) BackupDirectory(name, path string) error {
-	cmd := exec.Command("restic", "backup", path, "--tag", fmt.Sprintf("name=%s", name), "--json")
+func (r Restic) BackupDirectory(name, path, exclude, excludeFile string) error {
+	args := []string{"backup", path, "--tag", fmt.Sprintf("name=%s", name), "--json"}
+	if exclude != "" {
+		args = append(args, "--exclude", exclude)
+	}
+	if excludeFile != "" {
+		args = append(args, "--exclude-file", excludeFile)
+	}
+
+	cmd := exec.Command("restic", args...)
 	cmd.Env = r.getCommandEnv()
 
 	output, err := cmd.CombinedOutput()

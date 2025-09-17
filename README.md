@@ -55,6 +55,8 @@ backups:
     name: mongodb-dump
     pre_command: "docker exec -i mongodb mongodump --archive=/mongodb-dump/mongodb-dump.archive"
     post_command: "docker exec -i mongodb rm /mongodb-dump/mongodb-dump.archive"
+    exclude: ".DS_Store"
+    exclude_file: "/config/exclude.txt"
 ```
 
 docker-compose.yml
@@ -71,7 +73,9 @@ services:
       - ./config.yml:/auto-restic/config.yml:ro
       - ./data:/data
       - ./restic:/repository
+      - ./restore:/restore
       - /var/run/docker.sock:/var/run/docker.sock # only required if you run docker commands for pre-post backup scripts
+      - ./restic-tmp:/tmp # Eventually ount tmp directory to a larger disk, as S3 snapshot create a temporary archive
 ```
 
 ## CLI

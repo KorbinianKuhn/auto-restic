@@ -1,4 +1,73 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "loki",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "bargauge",
+      "name": "Bar gauge",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.1.1"
+    },
+    {
+      "type": "panel",
+      "id": "logs",
+      "name": "Logs",
+      "version": ""
+    },
+    {
+      "type": "datasource",
+      "id": "loki",
+      "name": "Loki",
+      "version": "12.1.1"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -18,13 +87,13 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3,
+  "id": null,
   "links": [],
   "panels": [
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -47,7 +116,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Backup Age"
+              "options": "Date"
             },
             "properties": [
               {
@@ -87,7 +156,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Backup Count"
+              "options": "Count"
             },
             "properties": [
               {
@@ -121,7 +190,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Backup Errors"
+              "options": "Errors (7d)"
             },
             "properties": [
               {
@@ -158,9 +227,7 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -173,42 +240,42 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
           "expr": "time() - min(backup_restic_snapshot_latest_timestamp_seconds{instance=~\"$instance\"})",
           "hide": false,
           "instant": true,
-          "legendFormat": "Backup Age",
+          "legendFormat": "Date",
           "range": false,
           "refId": "latest"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
           "expr": "count(backup_restic_snapshot_count{instance=~\"$instance\"} < 14) or vector(0)",
           "hide": false,
           "instant": true,
-          "legendFormat": "Backup Count",
+          "legendFormat": "Count",
           "range": false,
           "refId": "invalid_count"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
           "expr": "increase(backup_restic_snapshot_errors_total{instance=~\"$instance\"}[7d]) or vector(0)",
           "hide": false,
           "instant": true,
-          "legendFormat": "Backup Errors",
+          "legendFormat": "Errors (7d)",
           "range": false,
           "refId": "errors"
         }
@@ -219,7 +286,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -242,7 +309,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Backup Age"
+              "options": "Date"
             },
             "properties": [
               {
@@ -260,13 +327,13 @@
                         "index": 0,
                         "text": "up-to-date"
                       },
-                      "to": 86400
+                      "to": 1209600
                     },
                     "type": "range"
                   },
                   {
                     "options": {
-                      "from": 86401,
+                      "from": 1209601,
                       "result": {
                         "color": "red",
                         "index": 1,
@@ -282,7 +349,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Backup Count"
+              "options": "Count"
             },
             "properties": [
               {
@@ -316,7 +383,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Backup Errors"
+              "options": "Errors (30d)"
             },
             "properties": [
               {
@@ -353,9 +420,7 @@
         "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -368,42 +433,42 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
           "expr": "time() - min(backup_s3_snapshot_latest_timestamp_seconds{instance=~\"$instance\"})",
           "hide": false,
           "instant": true,
-          "legendFormat": "Backup Age",
+          "legendFormat": "Date",
           "range": false,
           "refId": "latest"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
           "expr": "count(backup_s3_snapshot_count{instance=~\"$instance\"} != 7)",
           "hide": false,
           "instant": true,
-          "legendFormat": "Backup Count",
+          "legendFormat": "Count",
           "range": false,
           "refId": "invalid_count"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
           "expr": "increase(backup_s3_snapshot_errors_total{instance=~\"$instance\"}[30d]) or vector(0)",
           "hide": false,
           "instant": true,
-          "legendFormat": "Backup Errors",
+          "legendFormat": "Errors (30d)",
           "range": false,
           "refId": "errors"
         }
@@ -414,7 +479,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -459,9 +524,7 @@
         "namePlacement": "left",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -479,7 +542,11 @@
           "instant": true,
           "legendFormat": "{{operation}}",
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Scheduler Errors",
@@ -496,7 +563,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -618,7 +685,7 @@
                     },
                     {
                       "color": "red",
-                      "value": 86400
+                      "value": 1209600
                     }
                   ]
                 }
@@ -696,9 +763,7 @@
           "countRows": false,
           "enablePagination": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true,
@@ -709,7 +774,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -724,7 +789,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -739,7 +804,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -754,7 +819,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -769,7 +834,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -784,7 +849,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -812,10 +877,7 @@
             "alias": "total_errors",
             "mode": "reduceRow",
             "reduce": {
-              "include": [
-                "Value #s3_errors",
-                "Value #restic_errors"
-              ],
+              "include": ["Value #s3_errors", "Value #restic_errors"],
               "reducer": "sum"
             }
           }
@@ -909,7 +971,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -952,9 +1014,7 @@
         "namePlacement": "top",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -971,7 +1031,11 @@
           "instant": true,
           "legendFormat": "{{backup_name}}",
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Largest (Restic)",
@@ -980,7 +1044,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1056,9 +1120,7 @@
         "orientation": "vertical",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1071,7 +1133,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1085,7 +1147,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1103,7 +1165,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1146,9 +1208,7 @@
         "namePlacement": "top",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1165,7 +1225,11 @@
           "instant": true,
           "legendFormat": "{{backup_name}}",
           "range": false,
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
       ],
       "title": "Largest (S3)",
@@ -1174,7 +1238,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1277,9 +1341,7 @@
           "countRows": false,
           "enablePagination": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true,
@@ -1290,7 +1352,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1305,7 +1367,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1320,7 +1382,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1335,7 +1397,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1363,10 +1425,7 @@
             "alias": "total_size",
             "mode": "reduceRow",
             "reduce": {
-              "include": [
-                "Value #s3_total_size",
-                "Value #restic_total_size"
-              ],
+              "include": ["Value #s3_total_size", "Value #restic_total_size"],
               "reducer": "sum"
             }
           }
@@ -1443,7 +1502,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "aepgk6igp92wwd"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -1567,9 +1626,7 @@
           "countRows": false,
           "enablePagination": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true,
@@ -1580,7 +1637,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1595,7 +1652,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1610,7 +1667,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aepgk6igp92wwd"
+            "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1638,10 +1695,7 @@
             "alias": "total_duration",
             "mode": "reduceRow",
             "reduce": {
-              "include": [
-                "Value #restic_duration",
-                "Value #s3_duration"
-              ],
+              "include": ["Value #restic_duration", "Value #s3_duration"],
               "reducer": "sum"
             }
           }
@@ -1730,7 +1784,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "aepgk7zyaz6yoc"
+        "uid": "${DS_LOKI}"
       },
       "description": "",
       "fieldConfig": {
@@ -1906,7 +1960,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "aepgk7zyaz6yoc"
+            "uid": "${DS_LOKI}"
           },
           "direction": "backward",
           "editorMode": "code",
@@ -1931,11 +1985,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "aepgk7zyaz6yoc"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "uid": "${DS_LOKI}"
       },
       "gridPos": {
         "h": 7,
@@ -1960,7 +2010,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "aepgk7zyaz6yoc"
+            "uid": "${DS_LOKI}"
           },
           "direction": "backward",
           "editorMode": "code",
@@ -1973,19 +2023,15 @@
       "type": "logs"
     }
   ],
-  "preload": false,
   "schemaVersion": 41,
   "tags": [],
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "aepgk6igp92wwd"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(backup_restic_snapshot_count,instance)",
         "includeAll": true,
@@ -2021,12 +2067,13 @@
     ]
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Backups",
-  "uid": "injszgx",
-  "version": 55
+  "uid": "auto-restic",
+  "version": 4,
+  "weekStart": ""
 }

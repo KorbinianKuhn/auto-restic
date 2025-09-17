@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -78,6 +79,7 @@ type BackupConfig struct {
 	Name        string `mapstructure:"name"`
 	Path        string `mapstructure:"path"`
 	Exclude     string `mapstructure:"exclude"`
+	ExcludeFile string `mapstructure:"exclude_file"`
 	PreCommand  string `mapstructure:"pre_command"`
 	PostCommand string `mapstructure:"post_command"`
 }
@@ -188,6 +190,13 @@ func Get() (Config, error) {
 				return config, fmt.Errorf("duplicate backup name: %s", b.Name)
 			}
 			names[b.Name] = true
+
+			if b.ExcludeFile != "" {
+				_, err := os.Stat(b.ExcludeFile)
+				if os.IsNotExist(err) {
+					return config, fmt.Errorf("exclude file does not exist: %s", b.ExcludeFile)
+				}
+			}
 		}
 	}
 
