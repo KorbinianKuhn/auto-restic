@@ -61,7 +61,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 			}
 		}
 
-		slog.Info("create restic snapshot", "paths", backup.Path, "exclude")
+		slog.Info("create restic snapshot", "paths", backup.Path)
 		err := r.BackupDirectory(backup.Name, backup.Path, backup.Exclude, backup.ExcludeFile)
 		if err != nil {
 			m.AddResticErrorByBackupName(backup.Name)
