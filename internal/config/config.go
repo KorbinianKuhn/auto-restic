@@ -155,6 +155,20 @@ func Get() (Config, error) {
 		return config, fmt.Errorf("invalid logging configuration: %w", err)
 	}
 
+	// Set logger
+	switch config.Logging.Format {
+	case LogFormatText:
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: config.Logging.SlogLevel,
+		})))
+	case LogFormatJSON:
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: config.Logging.SlogLevel,
+		})))
+	default:
+		slog.SetLogLoggerLevel(config.Logging.SlogLevel)
+	}
+
 	if config.Restic.Password == "" {
 		return config, fmt.Errorf("RESTIC_PASSWORD is required")
 	}
@@ -180,23 +194,27 @@ func Get() (Config, error) {
 	}
 
 	// Validate backup configurations
+	names := make(map[string]bool)
 	for _, backup := range config.Backups {
 		if backup.Path == "" {
 			return config, fmt.Errorf("backup path is required")
 		}
-		names := make(map[string]bool)
-		for _, b := range config.Backups {
-			if names[b.Name] {
-				return config, fmt.Errorf("duplicate backup name: %s", b.Name)
-			}
-			names[b.Name] = true
 
-			if b.ExcludeFile != "" {
-				_, err := os.Stat(b.ExcludeFile)
-				if os.IsNotExist(err) {
-					return config, fmt.Errorf("exclude file does not exist: %s", b.ExcludeFile)
-				}
+		if names[backup.Name] {
+			return config, fmt.Errorf("duplicate backup name: %s", backup.Name)
+		}
+		names[backup.Name] = true
+
+		if backup.ExcludeFile != "" {
+			_, err := os.Stat(backup.ExcludeFile)
+			if os.IsNotExist(err) {
+				return config, fmt.Errorf("exclude file does not exist: %s", backup.ExcludeFile)
 			}
+		}
+
+		_, err := os.Stat(backup.Path)
+		if os.IsNotExist(err) {
+			slog.Warn("backup path does not exist yet", "path", backup.Path)
 		}
 	}
 

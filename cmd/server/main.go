@@ -27,23 +27,14 @@ func panicOnError(message string, err error) {
 }
 
 func main() {
+	// Default logger (will be overwritten during config load)
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	// Load config
 	c, err := config.Get()
 	panicOnError("failed to load config", err)
-
-	// Set logger
-	switch c.Logging.Format {
-	case config.LogFormatText:
-		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: c.Logging.SlogLevel,
-		})))
-	case config.LogFormatJSON:
-		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-			Level: c.Logging.SlogLevel,
-		})))
-	default:
-		slog.SetLogLoggerLevel(c.Logging.SlogLevel)
-	}
 
 	// Initialize restic
 	r, err := restic.NewRestic(c.Restic.Repository, c.Restic.Password)
