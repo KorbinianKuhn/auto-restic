@@ -87,12 +87,8 @@ func extractRegularFile(tarReader *tar.Reader, targetPath string, header *tar.He
 	return nil
 }
 
-func WriteTar(w io.Writer, src string) error {
-	tarWriter := tar.NewWriter(w)
-	defer tarWriter.Close()
-
-	// Walk through the source directory
-	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+func WriteDirectoryToTar(w *tar.Writer, src string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("error walking path %s: %w", path, err)
 		}
@@ -130,21 +126,19 @@ func WriteTar(w io.Writer, src string) error {
 		}
 
 		// Write header
-		if err := tarWriter.WriteHeader(header); err != nil {
+		if err := w.WriteHeader(header); err != nil {
 			return fmt.Errorf("failed to write tar header for %s: %w", path, err)
 		}
 
 		// Write file content for regular files
 		if info.Mode().IsRegular() {
-			if err := writeFileToTar(tarWriter, path); err != nil {
+			if err := writeFileToTar(w, path); err != nil {
 				return fmt.Errorf("failed to write file content for %s: %w", path, err)
 			}
 		}
 
 		return nil
 	})
-
-	return err
 }
 
 // Helper function to write regular file content to tar with better error handling

@@ -1,6 +1,7 @@
 package task
 
 import (
+	"archive/tar"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -170,14 +171,24 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 			errCh <- fmt.Errorf("failed to create age encryptor: %w", err)
 			return
 		}
-		defer ageWriter.Close()
 
 		// Wrap age in gzip
 		gzipWriter := gzip.NewWriter(ageWriter)
-		defer gzipWriter.Close()
 
 		// Wrap gzip in tar
-		err = utils.WriteTar(gzipWriter, tmpDir)
+		tarWriter := tar.NewWriter(gzipWriter)
+		err = utils.WriteDirectoryToTar(tarWriter, tmpDir)
+
+		// Close all writers in correct order
+		if cerr := tarWriter.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close tar writer: %w", cerr)
+		}
+		if cerr := gzipWriter.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close gzip writer: %w", cerr)
+		}
+		if cerr := ageWriter.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("failed to close age writer: %w", cerr)
+		}
 
 		errCh <- err
 	}()
