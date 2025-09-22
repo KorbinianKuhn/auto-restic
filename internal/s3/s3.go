@@ -3,7 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 	"time"
 
@@ -76,24 +76,11 @@ func (s3 S3) ListObjects() ([]S3Object, error) {
 	return objects, nil
 }
 
-func (s3 S3) UploadFile(filePath string) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to stat file: %w", err)
-	}
-
-	// Upload the file to the bucket
-	_, err = s3.client.PutObject(context.TODO(), s3.bucket, fileInfo.Name(), file, fileInfo.Size(), minio.PutObjectOptions{})
+func (s3 S3) StreamUploadFile(filename string, reader *io.PipeReader) error {
+	_, err := s3.client.PutObject(context.TODO(), s3.bucket, filename, reader, -1, minio.PutObjectOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
-
 	return nil
 }
 
@@ -108,12 +95,18 @@ func (s3 S3) RemoveObject(objectKey, versionID string) error {
 	return nil
 }
 
-func (s3 S3) DownloadFile(objectKey, versionID, filePath string) error {
-	err := s3.client.FGetObject(context.TODO(), s3.bucket, objectKey, filePath, minio.GetObjectOptions{
+func (s3 S3) StreamDownloadFile(objectKey, versionID string) (*minio.Object, error) {
+	obj, err := s3.client.GetObject(context.TODO(), s3.bucket, objectKey, minio.GetObjectOptions{
 		VersionID: versionID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to download S3 object: %w", err)
+		return nil, err
 	}
-	return nil
+
+	if _, err := obj.Stat(); err != nil {
+		obj.Close()
+		return nil, err
+	}
+
+	return obj, nil
 }

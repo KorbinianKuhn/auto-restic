@@ -1,21 +1,20 @@
 package main
 
 import (
-	"archive/tar"
 	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"filippo.io/age"
 	"github.com/korbiniankuhn/auto-restic/internal/config"
 	"github.com/korbiniankuhn/auto-restic/internal/restic"
 	"github.com/korbiniankuhn/auto-restic/internal/s3"
+	"github.com/korbiniankuhn/auto-restic/internal/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -226,79 +225,38 @@ func main() {
 			mountPath, _ := cmd.Flags().GetString("mount-path")
 			session := cmd.Context().Value(ctxKeySession).(*Session)
 
-			encryptedFilepath := path.Join(mountPath, objectKey)
-			decryptedFilepath := path.Join(mountPath, fmt.Sprintf("%s.dec", objectKey))
-
-			// Download S3 Object
-			err := session.S3.DownloadFile(objectKey, versionID, encryptedFilepath)
-			if err != nil {
-				return fmt.Errorf("failed to download S3 object: %w", err)
-			}
+			decryptedPath := path.Join(mountPath, strings.TrimSuffix(objectKey, ".tar.gz.age"))
 
 			// Create age identity
 			identity, err := age.NewScryptIdentity(session.Config.S3.Passphrase)
 			if err != nil {
-				return fmt.Errorf("failed to create identity: %w", err)
+				return fmt.Errorf("failed to create age identity: %w", err)
 			}
 
-			// Read encrypted file
-			encFile, err := os.Open(encryptedFilepath)
+			// Get a reader for the S3 object (streaming)
+			s3Reader, err := session.S3.StreamDownloadFile(objectKey, versionID)
 			if err != nil {
-				return fmt.Errorf("failed to open downloaded file: %w", err)
+				return fmt.Errorf("failed to get S3 stream: %w", err)
 			}
-			defer encFile.Close()
+			defer s3Reader.Close()
 
-			// Decrypt file
-			decrypted, err := age.Decrypt(encFile, identity)
+			// Decrypt stream
+			decReader, err := age.Decrypt(s3Reader, identity)
 			if err != nil {
-				return fmt.Errorf("failed to decrypt file: %w", err)
+				return fmt.Errorf("failed to decrypt stream: %w", err)
 			}
 
-			// Uncompress
-			gzReader, err := gzip.NewReader(decrypted)
+			// Gzip reader
+			gzReader, err := gzip.NewReader(decReader)
 			if err != nil {
 				return fmt.Errorf("failed to create gzip reader: %w", err)
 			}
 			defer gzReader.Close()
 
-			tarReader := tar.NewReader(gzReader)
-			for {
-				header, err := tarReader.Next()
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					return fmt.Errorf("error reading tar archive: %w", err)
-				}
+			// Tar extraction
+			utils.ExtractTar(gzReader, decryptedPath)
 
-				targetPath := filepath.Join(decryptedFilepath, header.Name)
-
-				switch header.Typeflag {
-				case tar.TypeDir:
-					if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
-						return fmt.Errorf("failed to create directory: %w", err)
-					}
-				case tar.TypeReg:
-					if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-						return fmt.Errorf("failed to create parent directory: %w", err)
-					}
-
-					outFile, err := os.Create(targetPath)
-					if err != nil {
-						return fmt.Errorf("failed to create file: %w", err)
-					}
-
-					if _, err := io.Copy(outFile, tarReader); err != nil {
-						outFile.Close()
-						return fmt.Errorf("failed to write file: %w", err)
-					}
-					outFile.Close()
-				default:
-					// ignore other types
-				}
-			}
-
-			println("Restored S3 object:", objectKey, "to", mountPath)
+			println("Restored S3 object:", objectKey, "to", decryptedPath)
 			return nil
 		},
 	}

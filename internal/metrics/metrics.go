@@ -18,20 +18,19 @@ const (
 )
 
 type Metrics struct {
-	schedulerErrors                *prometheus.CounterVec
-	resticSnapshotErrors           *prometheus.CounterVec
-	resticSnapshotLatestDuration   *prometheus.GaugeVec
-	resticSnapshotLatestSize       *prometheus.GaugeVec
-	resticSnapshotLatestTimestamp  *prometheus.GaugeVec
-	resticSnapshotCount            *prometheus.GaugeVec
-	resticSnapshotTotalSize        *prometheus.GaugeVec
-	s3SnapshotErrors               *prometheus.CounterVec
-	s3SnapshotLatestDuration       *prometheus.GaugeVec
-	s3SnapshotLatestUploadDuration *prometheus.GaugeVec
-	s3SnapshotLatestSize           *prometheus.GaugeVec
-	s3SnapshotLatestTimestamp      *prometheus.GaugeVec
-	s3SnapshotCount                *prometheus.GaugeVec
-	s3SnapshotTotalSize            *prometheus.GaugeVec
+	schedulerErrors               *prometheus.CounterVec
+	resticSnapshotErrors          *prometheus.CounterVec
+	resticSnapshotLatestDuration  *prometheus.GaugeVec
+	resticSnapshotLatestSize      *prometheus.GaugeVec
+	resticSnapshotLatestTimestamp *prometheus.GaugeVec
+	resticSnapshotCount           *prometheus.GaugeVec
+	resticSnapshotTotalSize       *prometheus.GaugeVec
+	s3SnapshotErrors              *prometheus.CounterVec
+	s3SnapshotLatestDuration      *prometheus.GaugeVec
+	s3SnapshotLatestSize          *prometheus.GaugeVec
+	s3SnapshotLatestTimestamp     *prometheus.GaugeVec
+	s3SnapshotCount               *prometheus.GaugeVec
+	s3SnapshotTotalSize           *prometheus.GaugeVec
 }
 
 func NewMetrics() *Metrics {
@@ -117,15 +116,6 @@ func NewMetrics() *Metrics {
 			},
 			[]string{"backup_name"},
 		),
-		s3SnapshotLatestUploadDuration: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: "backup",
-				Subsystem: "s3",
-				Name:      "snapshot_latest_upload_duration_seconds",
-				Help:      "Duration in seconds of the latest S3 snapshot upload per backup name",
-			},
-			[]string{"backup_name"},
-		),
 		s3SnapshotLatestSize: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Namespace: "backup",
@@ -202,9 +192,8 @@ func (m *Metrics) SetS3StatsByBackupName(name string, count int, totalSize int64
 	m.s3SnapshotLatestTimestamp.WithLabelValues(name).Set(latestTime)
 }
 
-func (m *Metrics) SetS3DurationByBackupName(name string, duration float64, uploadDuration float64) {
+func (m *Metrics) SetS3DurationByBackupName(name string, duration float64) {
 	m.s3SnapshotLatestDuration.WithLabelValues(name).Set(duration)
-	m.s3SnapshotLatestUploadDuration.WithLabelValues(name).Set(uploadDuration)
 }
 
 func (m *Metrics) GetMetricsHandler() http.Handler {
@@ -223,7 +212,6 @@ func (m *Metrics) GetMetricsHandler() http.Handler {
 		m.s3SnapshotLatestSize,
 		m.s3SnapshotLatestTimestamp,
 		m.s3SnapshotLatestDuration,
-		m.s3SnapshotLatestUploadDuration,
 	)
 
 	handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})
