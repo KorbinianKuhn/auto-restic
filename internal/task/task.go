@@ -2,7 +2,6 @@ package task
 
 import (
 	"archive/tar"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/klauspost/pgzip"
 	"github.com/korbiniankuhn/auto-restic/internal/config"
 	"github.com/korbiniankuhn/auto-restic/internal/metrics"
 	"github.com/korbiniankuhn/auto-restic/internal/restic"
@@ -173,7 +173,7 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 		}
 
 		// Wrap age in gzip
-		gzipWriter := gzip.NewWriter(ageWriter)
+		gzipWriter := pgzip.NewWriter(ageWriter)
 
 		// Wrap gzip in tar
 		tarWriter := tar.NewWriter(gzipWriter)

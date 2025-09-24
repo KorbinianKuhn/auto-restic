@@ -45,6 +45,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-co-op/gocron/v2 v2.16.1
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/klauspost/pgzip v1.2.6
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.1 // indirect

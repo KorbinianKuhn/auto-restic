@@ -1,7 +1,6 @@
 package main
 
 import (
-	"compress/gzip"
 	"context"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"filippo.io/age"
+	"github.com/klauspost/pgzip"
 	"github.com/korbiniankuhn/auto-restic/internal/config"
 	"github.com/korbiniankuhn/auto-restic/internal/restic"
 	"github.com/korbiniankuhn/auto-restic/internal/s3"
@@ -247,7 +247,7 @@ func main() {
 			}
 
 			// Gzip reader
-			gzReader, err := gzip.NewReader(decReader)
+			gzReader, err := pgzip.NewReader(decReader)
 			if err != nil {
 				return fmt.Errorf("failed to create gzip reader: %w", err)
 			}
