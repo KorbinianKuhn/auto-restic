@@ -29,7 +29,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "12.1.1"
+      "version": "12.2.0"
     },
     {
       "type": "panel",
@@ -41,7 +41,7 @@
       "type": "datasource",
       "id": "loki",
       "name": "Loki",
-      "version": "12.1.1"
+      "version": "12.2.0"
     },
     {
       "type": "datasource",
@@ -235,7 +235,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -428,7 +428,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -532,7 +532,7 @@
         "sizing": "auto",
         "valueMode": "color"
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "editorMode": "code",
@@ -576,6 +576,9 @@
               "type": "color-text"
             },
             "filterable": false,
+            "footer": {
+              "reducers": []
+            },
             "inspect": false,
             "width": 130
           },
@@ -759,17 +762,11 @@
       "id": 9,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "enablePagination": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
+        "enablePagination": false,
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -1022,7 +1019,7 @@
         "sizing": "auto",
         "valueMode": "text"
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "editorMode": "code",
@@ -1128,7 +1125,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -1216,7 +1213,7 @@
         "sizing": "auto",
         "valueMode": "text"
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "editorMode": "code",
@@ -1252,6 +1249,9 @@
               "valueDisplayMode": "text"
             },
             "filterable": false,
+            "footer": {
+              "reducers": []
+            },
             "inspect": false,
             "width": 150
           },
@@ -1337,17 +1337,11 @@
       "id": 10,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "enablePagination": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
+        "enablePagination": false,
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -1517,10 +1511,13 @@
               "valueDisplayMode": "text"
             },
             "filterable": false,
+            "footer": {
+              "reducers": []
+            },
             "inspect": false,
             "width": 160
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -1574,27 +1571,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Total Duration (S3)"
-            },
-            "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "purple",
-                      "value": 0
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Upload Duration (S3)"
+              "options": "Duration (S3)"
             },
             "properties": [
               {
@@ -1622,17 +1599,11 @@
       "id": 8,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "enablePagination": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
+        "enablePagination": false,
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -1641,7 +1612,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "backup_restic_snapshot_latest_duration_seconds{instance=~\"$instance\"}",
+          "expr": "last_over_time(backup_restic_snapshot_latest_duration_seconds{instance=~\"$instance\"}[30d])",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1656,28 +1627,13 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "backup_s3_snapshot_latest_duration_seconds{instance=~\"$instance\"}",
+          "expr": "last_over_time(backup_s3_snapshot_latest_duration_seconds{instance=~\"$instance\"}[30d])",
           "format": "table",
           "hide": false,
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
           "refId": "s3_duration"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "backup_s3_snapshot_latest_upload_duration_seconds{instance=~\"$instance\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "s3_upload_duration"
         }
       ],
       "title": "Duration",
@@ -1749,7 +1705,7 @@
               "Value #restic_duration": "Duration (Restic)",
               "Value #restic_latest_size": "Size (Restic)",
               "Value #s3_count": "S3 Count",
-              "Value #s3_duration": "Total Duration (S3)",
+              "Value #s3_duration": "Duration (S3)",
               "Value #s3_latest_duration": "S3 Duration",
               "Value #s3_latest_size": "Size (S3)",
               "Value #s3_latest_time": "S3 Latest Time",
@@ -1816,6 +1772,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1955,7 +1912,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -2005,7 +1962,7 @@
         "sortOrder": "Descending",
         "wrapLogMessage": false
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -2023,7 +1980,7 @@
       "type": "logs"
     }
   ],
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [],
   "templating": {
     "list": [
@@ -2067,13 +2024,13 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-24h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Backups",
   "uid": "auto-restic",
-  "version": 4,
+  "version": 8,
   "weekStart": ""
 }
