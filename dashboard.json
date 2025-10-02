@@ -87,7 +87,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": null,
   "links": [],
   "panels": [
     {
@@ -535,18 +534,18 @@
       "pluginVersion": "12.2.0",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "backup_scheduler_errors_total",
+          "expr": "backup_scheduler_errors_total{instance=~\"$instance\"}",
           "format": "time_series",
           "instant": true,
           "legendFormat": "{{operation}}",
           "range": false,
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          }
+          "refId": "A"
         }
       ],
       "title": "Scheduler Errors",
@@ -1022,17 +1021,17 @@
       "pluginVersion": "12.2.0",
       "targets": [
         {
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sort_desc(topk (5, backup_restic_snapshot_total_size_bytes > 0))",
-          "instant": true,
-          "legendFormat": "{{backup_name}}",
-          "range": false,
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
-          }
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sort_desc(topk (5, backup_restic_snapshot_total_size_bytes{instance=~\"$instance\"} > 0))",
+          "instant": true,
+          "legendFormat": "{{backup_name}}",
+          "range": false,
+          "refId": "A"
         }
       ],
       "title": "Largest (Restic)",
@@ -1216,17 +1215,17 @@
       "pluginVersion": "12.2.0",
       "targets": [
         {
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sort_desc(topk (5, backup_s3_snapshot_total_size_bytes > 0))",
-          "instant": true,
-          "legendFormat": "{{backup_name}}",
-          "range": false,
-          "refId": "A",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
-          }
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sort_desc(topk (5, backup_s3_snapshot_total_size_bytes{instance=~\"$instance\"} > 0))",
+          "instant": true,
+          "legendFormat": "{{backup_name}}",
+          "range": false,
+          "refId": "A"
         }
       ],
       "title": "Largest (S3)",
@@ -2031,6 +2030,7 @@
   "timezone": "browser",
   "title": "Backups",
   "uid": "auto-restic",
-  "version": 8,
-  "weekStart": ""
+  "version": 2,
+  "weekStart": "",
+  "id": null
 }
