@@ -271,7 +271,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "increase(backup_restic_snapshot_errors_total{instance=~\"$instance\"}[7d]) or vector(0)",
+          "expr": "sum(increase(backup_restic_snapshot_errors_total{instance=~\"$instance\"}[7d])) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "Errors (7d)",
@@ -464,7 +464,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "increase(backup_s3_snapshot_errors_total{instance=~\"$instance\"}[30d]) or vector(0)",
+          "expr": "sum(increase(backup_s3_snapshot_errors_total{instance=~\"$instance\"}[30d])) or vector(0)",
           "hide": false,
           "instant": true,
           "legendFormat": "Errors (30d)",
@@ -747,6 +747,10 @@
                     }
                   ]
                 }
+              },
+              {
+                "id": "decimals",
+                "value": 0
               }
             ]
           }
@@ -2030,7 +2034,7 @@
   "timezone": "browser",
   "title": "Backups",
   "uid": "auto-restic",
-  "version": 2,
+  "version": 5,
   "weekStart": "",
   "id": null
 }

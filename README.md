@@ -94,14 +94,14 @@ or start a temporary one:
 docker compose run --entrypoint "/bin/sh" auto-restic
 ```
 
-| Command                                                          | Description                                 |
-| ---------------------------------------------------------------- | ------------------------------------------- |
-| ./cli restic ls                                                  | List all local backups and snapshots        |
-| ./cli restic rm --name ""                                        | Remove all snapshots of a backup            |
-| ./cli restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
-| ./cli s3 ls                                                      | List all S3 backups and versions            |
-| ./cli s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
-| ./cli s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
+| Command                                                                | Description                                 |
+| ---------------------------------------------------------------------- | ------------------------------------------- |
+| auto-restic restic ls                                                  | List all local backups and snapshots        |
+| auto-restic restic rm --name ""                                        | Remove all snapshots of a backup            |
+| auto-restic restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
+| auto-restic s3 ls                                                      | List all S3 backups and versions            |
+| auto-restic s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
+| auto-restic s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
 
 ### S3 (Disaster Recovery)
 
