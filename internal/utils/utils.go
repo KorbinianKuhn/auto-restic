@@ -4,9 +4,11 @@ import (
 	"archive/tar"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 )
 
 func ExtractTar(r io.Reader, dest string) error {
@@ -151,4 +153,13 @@ func writeFileToTar(tarWriter *tar.Writer, filePath string) error {
 
 	_, err = io.Copy(tarWriter, file)
 	return err
+}
+
+// Exponential backoff with jitter
+func BackoffTime(attempt int) time.Duration {
+	base := time.Second
+	max := 30 * time.Second
+	sleep := time.Duration(1<<attempt) * base
+	jitter := time.Duration(rand.Int63n(int64(base)))
+	return min(sleep+jitter, max)
 }

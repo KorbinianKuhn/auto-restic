@@ -134,7 +134,7 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 	return nil
 }
 
-func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Snapshot, passphrase string) error {
+func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Snapshot, passphrase string, retries int) error {
 	// Create temporary directory to restore snapshot
 	tmpDir, err := os.MkdirTemp("", "restic-dump")
 	if err != nil {
@@ -148,59 +148,77 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
 
-	// Stream tar.gz.age to S3
+	// Stream tar.gz.age to S3 with retry
 	slog.Info("create encrypted archive and upload to s3", "snapshot", snapshot.Name)
 
-	// Create a pipe for streaming to S3
-	pr, pw := io.Pipe()
-	errCh := make(chan error, 1)
+	maxRetries := retries + 1
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Create a pipe for streaming to S3
+		pr, pw := io.Pipe()
+		errCh := make(chan error, 1)
 
-	go func() {
-		defer pw.Close()
+		go func() {
+			defer pw.Close()
 
-		// Create age recipient
-		recipient, err := age.NewScryptRecipient(passphrase)
-		if err != nil {
-			errCh <- fmt.Errorf("failed to create age recipient: %w", err)
-			return
+			// Create age recipient
+			recipient, err := age.NewScryptRecipient(passphrase)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to create age recipient: %w", err)
+				return
+			}
+
+			// Wrap pipe in age encryptor
+			ageWriter, err := age.Encrypt(pw, recipient)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to create age encryptor: %w", err)
+				return
+			}
+
+			// Wrap age in gzip
+			gzipWriter := pgzip.NewWriter(ageWriter)
+
+			// Wrap gzip in tar
+			tarWriter := tar.NewWriter(gzipWriter)
+			err = utils.WriteDirectoryToTar(tarWriter, tmpDir)
+
+			// Close all writers in correct order
+			if cerr := tarWriter.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("failed to close tar writer: %w", cerr)
+			}
+			if cerr := gzipWriter.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("failed to close gzip writer: %w", cerr)
+			}
+			if cerr := ageWriter.Close(); cerr != nil && err == nil {
+				err = fmt.Errorf("failed to close age writer: %w", cerr)
+			}
+
+			errCh <- err
+		}()
+
+		// Stream directly to S3
+		uploadErr := s3.StreamUploadFile(snapshot.Name+".tar.gz.age", pr)
+
+		// Wait for the goroutine to finish and catch errors
+		archiveErr := <-errCh
+
+		if uploadErr == nil && archiveErr == nil {
+			return nil
 		}
 
-		// Wrap pipe in age encryptor
-		ageWriter, err := age.Encrypt(pw, recipient)
-		if err != nil {
-			errCh <- fmt.Errorf("failed to create age encryptor: %w", err)
-			return
+		if attempt < maxRetries {
+			backoffTime := utils.BackoffTime(attempt)
+			slog.Warn("upload or archive creation failed, retrying", "attempt", attempt,
+				"backoff_time", backoffTime, "upload_error", uploadErr, "archive_error", archiveErr)
+			time.Sleep(backoffTime)
+			continue
 		}
 
-		// Wrap age in gzip
-		gzipWriter := pgzip.NewWriter(ageWriter)
-
-		// Wrap gzip in tar
-		tarWriter := tar.NewWriter(gzipWriter)
-		err = utils.WriteDirectoryToTar(tarWriter, tmpDir)
-
-		// Close all writers in correct order
-		if cerr := tarWriter.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("failed to close tar writer: %w", cerr)
+		if uploadErr != nil {
+			return fmt.Errorf("failed to upload to s3 after %d attempts: %w", maxRetries, uploadErr)
 		}
-		if cerr := gzipWriter.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("failed to close gzip writer: %w", cerr)
+		if archiveErr != nil {
+			return fmt.Errorf("failed during archive creation after %d attempts: %w", maxRetries, archiveErr)
 		}
-		if cerr := ageWriter.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("failed to close age writer: %w", cerr)
-		}
-
-		errCh <- err
-	}()
-
-	// Stream directly to S3
-	if err := s3.StreamUploadFile(snapshot.Name+".tar.gz.age", pr); err != nil {
-		return fmt.Errorf("failed to upload to s3: %w", err)
-	}
-
-	// Wait for the goroutine to finish and catch errors
-	if err := <-errCh; err != nil {
-		return fmt.Errorf("failed during archive creation: %w", err)
 	}
 
 	return nil
@@ -233,7 +251,12 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 			continue
 		}
 
-		err = createAndUploadEncryptedDump(r, s3, snapshot, c.S3.Passphrase)
+		retries := c.S3.Retries
+		if backup.S3Retries != nil {
+			retries = *backup.S3Retries
+		}
+
+		err = createAndUploadEncryptedDump(r, s3, snapshot, c.S3.Passphrase, retries)
 
 		if err != nil {
 			m.AddS3ErrorByBackupName(backup.Name)

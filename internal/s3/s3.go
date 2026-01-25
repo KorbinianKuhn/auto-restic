@@ -77,7 +77,9 @@ func (s3 S3) ListObjects() ([]S3Object, error) {
 }
 
 func (s3 S3) StreamUploadFile(filename string, reader *io.PipeReader) error {
-	_, err := s3.client.PutObject(context.TODO(), s3.bucket, filename, reader, -1, minio.PutObjectOptions{})
+	_, err := s3.client.PutObject(context.TODO(), s3.bucket, filename, reader, -1, minio.PutObjectOptions{
+		PartSize: 64 * 1024 * 1024, // 64MB parts for multipart upload
+	})
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}

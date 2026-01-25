@@ -50,6 +50,9 @@ cron:
   check: "0 2 2 * * 0" # Every Sunday 02:01
   prune: "0 3 2 * * 0" # Every Sunday 02:03
 
+s3:
+  retries: 2 # Additional attempts. Default = 2
+
 backups:
   - path: /data/mongodb-dump
     name: mongodb-dump
@@ -57,6 +60,7 @@ backups:
     post_command: "docker exec -i mongodb rm /mongodb-dump/mongodb-dump.archive"
     exclude: ".DS_Store"
     exclude_file: "/config/exclude.txt"
+    s3_retries: 1 # Overwrite the global retries if necessary
 ```
 
 docker-compose.yml

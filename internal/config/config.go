@@ -73,6 +73,7 @@ type S3Config struct {
 	Endpoint   string `mapstructure:"endpoint"`
 	Bucket     string `mapstructure:"bucket"`
 	Passphrase string `mapstructure:"passphrase"`
+	Retries    int    `mapstructure:"retries"`
 }
 
 type BackupConfig struct {
@@ -82,6 +83,7 @@ type BackupConfig struct {
 	ExcludeFile string `mapstructure:"exclude_file"`
 	PreCommand  string `mapstructure:"pre_command"`
 	PostCommand string `mapstructure:"post_command"`
+	S3Retries   *int   `mapstructure:"retries"`
 }
 
 type Config struct {
@@ -125,6 +127,7 @@ func Get() (Config, error) {
 	_ = v.BindEnv("s3.endpoint")
 	_ = v.BindEnv("s3.bucket")
 	_ = v.BindEnv("s3.passphrase")
+	_ = v.BindEnv("s3.retries")
 
 	// Default values
 	v.SetDefault("logging.level", "info")
@@ -139,6 +142,7 @@ func Get() (Config, error) {
 	v.SetDefault("cron.check", "0 2 2 * * 0")   // Every Sunday 02:02
 	v.SetDefault("cron.prune", "0 3 2 * * 0")   // Every Sunday 02:03
 	v.SetDefault("metrics_enabled", true)
+	v.SetDefault("s3.retries", 2)
 
 	// Optionally load config file
 	if err := v.ReadInConfig(); err != nil {
