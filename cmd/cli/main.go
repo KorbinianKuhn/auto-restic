@@ -53,7 +53,7 @@ func initRestic(c config.Config) restic.Restic {
 }
 
 func initS3(c config.Config) *s3.S3 {
-	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket)
+	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket, c.S3.Secure)
 	panicOnError("failed to initialize s3", err)
 	return s
 }
