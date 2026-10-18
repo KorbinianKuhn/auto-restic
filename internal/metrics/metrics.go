@@ -170,11 +170,14 @@ func (m *Metrics) AddResticErrorByBackupName(name string) {
 	m.resticSnapshotErrors.WithLabelValues(name).Inc()
 }
 
-func (m *Metrics) SetResticStatsByBackupName(name string, count int, totalSize int64, latestSize int64, latestTime float64) {
+func (m *Metrics) SetResticStatsByBackupName(name string, count int, latestSize int64, latestTime float64) {
 	m.resticSnapshotCount.WithLabelValues(name).Set(float64(count))
-	m.resticSnapshotTotalSize.WithLabelValues(name).Set(float64(totalSize))
 	m.resticSnapshotLatestSize.WithLabelValues(name).Set(float64(latestSize))
 	m.resticSnapshotLatestTimestamp.WithLabelValues(name).Set(latestTime)
+}
+
+func (m *Metrics) SetResticTotalSizeByBackupName(name string, totalSize int64) {
+	m.resticSnapshotTotalSize.WithLabelValues(name).Set(float64(totalSize))
 }
 
 func (m *Metrics) SetResticDurationByBackupName(name string, duration float64) {

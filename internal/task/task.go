@@ -126,20 +126,30 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 		latestTime[snapshot.Name] = float64(snapshot.Time.Unix())
 	}
 
+	// A failed stats call only skips the total size of that backup, all other
+	// gauges are still updated
+	var errs []error
 	for name := range snapshotBackupNames {
 		stats, err := r.GetSnapshotStatsByName(name)
 		if err != nil {
 			m.AddSchedulerError(metrics.SchedulerErrorResticGetSnapshotStats)
-			return fmt.Errorf("failed to get snapshot stats: %w", err)
+			slog.Error("failed to get snapshot stats", "backup", name, "error", err)
+			errs = append(errs, fmt.Errorf("failed to get snapshot stats for %s: %w", name, err))
+			// Keep the previous total size instead of reporting 0
+			delete(totalSize, name)
+			continue
 		}
 		totalSize[name] += int64(stats.TotalSize)
 	}
 
 	for name := range count {
-		m.SetResticStatsByBackupName(name, count[name], totalSize[name], latestSize[name], float64(latestTime[name]))
+		m.SetResticStatsByBackupName(name, count[name], latestSize[name], float64(latestTime[name]))
+		if size, ok := totalSize[name]; ok {
+			m.SetResticTotalSizeByBackupName(name, size)
+		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Snapshot, passphrase string, retries int) error {
