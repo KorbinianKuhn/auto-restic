@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,11 +13,11 @@ import (
 )
 
 func TestRunShellCommand(t *testing.T) {
-	if err := RunShellCommand("true", 0); err != nil {
+	if err := RunShellCommand(t.Context(), "true", 0); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	err := RunShellCommand("echo boom; exit 3", 0)
+	err := RunShellCommand(t.Context(), "echo boom; exit 3", 0)
 	if err == nil || !strings.Contains(err.Error(), "exit status 3") || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected exit status and output in error, got %v", err)
 	}
@@ -30,7 +31,7 @@ func TestRunShellCommandTimeoutKillsChildren(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "pid")
 
 	start := time.Now()
-	err := RunShellCommand("sleep 30 & echo $! > "+pidFile+"; wait", 500*time.Millisecond)
+	err := RunShellCommand(t.Context(), "sleep 30 & echo $! > "+pidFile+"; wait", 500*time.Millisecond)
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Fatalf("expected command to be aborted, took %s", elapsed)
 	}
@@ -60,5 +61,23 @@ func TestRunShellCommandTimeoutKillsChildren(t *testing.T) {
 			t.Fatalf("child process %d is still running", pid)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestRunShellCommandCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(500*time.Millisecond, cancel)
+
+	start := time.Now()
+	err := RunShellCommand(ctx, "sleep 30", 0)
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("expected command to be aborted, took %s", elapsed)
+	}
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	var timeoutErr *TimeoutError
+	if errors.As(err, &timeoutErr) {
+		t.Fatalf("expected no timeout error, got %v", err)
 	}
 }

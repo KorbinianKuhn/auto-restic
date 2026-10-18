@@ -1,6 +1,7 @@
 package restic
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -48,7 +49,7 @@ func TestTimeoutInterruptsRestic(t *testing.T) {
 	}
 
 	start := time.Now()
-	err = r.Check()
+	err = r.Check(t.Context())
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Fatalf("expected check to be aborted, took %s", elapsed)
 	}
@@ -75,12 +76,38 @@ func TestErrorIncludesOutput(t *testing.T) {
 		t.Fatalf("failed to create restic: %v", err)
 	}
 
-	err = r.ForgetAndPrune(7, 4, 3)
+	err = r.ForgetAndPrune(t.Context(), 7, 4, 3)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected command output in error, got %v", err)
 	}
 	var timeoutErr *utils.TimeoutError
 	if errors.As(err, &timeoutErr) {
 		t.Fatalf("expected no timeout error, got %v", err)
+	}
+}
+
+func TestCancelInterruptsRestic(t *testing.T) {
+	marker := setupFakeRestic(t)
+
+	r, err := NewRestic(t.TempDir(), "password")
+	if err != nil {
+		t.Fatalf("failed to create restic: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err = r.Check(ctx)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("expected check to be aborted, took %s", elapsed)
+	}
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+
+	content, err := os.ReadFile(marker)
+	if err != nil || strings.TrimSpace(string(content)) != "interrupted" {
+		t.Fatalf("expected restic to receive SIGINT, marker: %q, error: %v", content, err)
 	}
 }

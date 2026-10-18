@@ -19,6 +19,11 @@ import (
 	"github.com/go-co-op/gocron/v2"
 )
 
+// shutdownTimeout is how long running jobs may take to stop after a
+// termination signal. It exceeds restic's 1 minute interrupt grace period, so
+// restic can release its repository lock.
+const shutdownTimeout = 90 * time.Second
+
 func panicOnError(message string, err error) {
 	if err != nil {
 		slog.Error(message, "error", err)
@@ -27,6 +32,11 @@ func panicOnError(message string, err error) {
 }
 
 func main() {
+	// Cancelled on termination signal, which interrupts running restic
+	// commands, shell commands and uploads
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	// Default logger (will be overwritten during config load)
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -65,6 +75,7 @@ func main() {
 	// Schedule jobs
 	scheduler, err := gocron.NewScheduler(
 		gocron.WithLimitConcurrentJobs(1, gocron.LimitModeWait),
+		gocron.WithStopTimeout(shutdownTimeout),
 		// gocron recovers job panics and reports them only via its logger
 		gocron.WithLogger(slog.Default()),
 	)
@@ -74,7 +85,7 @@ func main() {
 	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.Backup, true),
 		gocron.NewTask(func() {
-			task.Backup(c, m, r)
+			task.Backup(ctx, c, m, r)
 		}),
 	)
 	panicOnError("failed to schedule backup job", err)
@@ -83,7 +94,7 @@ func main() {
 	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.Check, true),
 		gocron.NewTask(func() {
-			task.ResticCheck(m, r)
+			task.ResticCheck(ctx, m, r)
 		}),
 	)
 	panicOnError("failed to schedule check job", err)
@@ -92,7 +103,7 @@ func main() {
 	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.Prune, true),
 		gocron.NewTask(func() {
-			task.ForgetAndPrune(c, m, r)
+			task.ForgetAndPrune(ctx, c, m, r)
 		}),
 	)
 	panicOnError("failed to schedule prune job", err)
@@ -101,7 +112,7 @@ func main() {
 	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.S3, true),
 		gocron.NewTask(func() {
-			task.S3Backup(c, m, r, s)
+			task.S3Backup(ctx, c, m, r, s)
 		}),
 	)
 	panicOnError("failed to schedule s3 job", err)
@@ -135,20 +146,22 @@ func main() {
 	slog.Info("http server started", "port", "2112")
 
 	// Wait for termination signal
-	osSignal := make(chan os.Signal, 1)
-	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
-
-	<-osSignal
+	<-ctx.Done()
+	// Restore default signal handling, a second signal terminates immediately
+	stop()
 	slog.Info("received termination signal, shutting down")
 
-	// Stop scheduler
-	scheduler.Shutdown()
-	slog.Info("scheduler stopped")
+	// Stop scheduler, waits for running jobs to be interrupted
+	if err := scheduler.Shutdown(); err != nil {
+		slog.Error("failed to stop scheduler", "error", err)
+	} else {
+		slog.Info("scheduler stopped")
+	}
 
 	// Stop http server
-	ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		panicOnError("failed to shutdown http server", err)
 	}
 

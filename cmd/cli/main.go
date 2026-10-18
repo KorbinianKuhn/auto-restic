@@ -123,7 +123,7 @@ func main() {
 
 			session := cmd.Context().Value(ctxKeySession).(*Session)
 
-			output, err := session.Restic.RemoveBackupDirectory(backupName)
+			output, err := session.Restic.RemoveBackupDirectory(cmd.Context(), backupName)
 			if err != nil {
 				return fmt.Errorf("failed to remove restic snapshots: %w", err)
 			}
@@ -144,7 +144,7 @@ func main() {
 			mountPath, _ := cmd.Flags().GetString("mount-path")
 			session := cmd.Context().Value(ctxKeySession).(*Session)
 
-			err := session.Restic.Restore(snapshotID, mountPath)
+			err := session.Restic.Restore(cmd.Context(), snapshotID, mountPath)
 			if err != nil {
 				return fmt.Errorf("failed to restore restic snapshot: %w", err)
 			}
