@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -105,6 +106,10 @@ func validateTimeout(name string, timeout time.Duration) error {
 
 // validateRetries rejects negative values, which would otherwise skip the
 // upload entirely
+// backupNamePattern keeps names usable as restic tag ("name=<name>", no
+// commas) and S3 object key ("<name>.tar.gz.age")
+var backupNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
 func validateRetries(name string, retries int) error {
 	if retries < 0 {
 		return fmt.Errorf("%s must not be negative: %d", name, retries)
@@ -242,6 +247,10 @@ func Get() (Config, error) {
 	for _, backup := range config.Backups {
 		if backup.Path == "" {
 			return config, fmt.Errorf("backup path is required")
+		}
+
+		if !backupNamePattern.MatchString(backup.Name) {
+			return config, fmt.Errorf("invalid backup name %q: must be non-empty and only contain letters, digits, '.', '_' and '-'", backup.Name)
 		}
 
 		if names[backup.Name] {

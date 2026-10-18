@@ -57,7 +57,7 @@ s3:
 
 backups:
   - path: /data/mongodb-dump
-    name: mongodb-dump
+    name: mongodb-dump # required, only letters, digits, ".", "_" and "-"
     pre_command: "docker exec -i mongodb mongodump --archive=/mongodb-dump/mongodb-dump.archive"
     post_command: "docker exec -i mongodb rm /mongodb-dump/mongodb-dump.archive"
     exclude: ".DS_Store"
