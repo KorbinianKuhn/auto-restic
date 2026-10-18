@@ -254,7 +254,9 @@ func main() {
 			defer gzReader.Close()
 
 			// Tar extraction
-			utils.ExtractTar(gzReader, decryptedPath)
+			if err := utils.ExtractTar(gzReader, decryptedPath); err != nil {
+				return fmt.Errorf("failed to extract archive: %w", err)
+			}
 
 			println("Restored S3 object:", objectKey, "to", decryptedPath)
 			return nil
