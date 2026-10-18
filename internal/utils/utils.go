@@ -6,10 +6,17 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"time"
 )
+
+// RunShellCommand runs command via "sh -c"
+func RunShellCommand(command string) error {
+	cmd := exec.Command("sh", "-c", command)
+	return cmd.Run()
+}
 
 func ExtractTar(r io.Reader, dest string) error {
 	tarReader := tar.NewReader(r)

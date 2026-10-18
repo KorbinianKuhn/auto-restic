@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"time"
 
 	"filippo.io/age"
@@ -51,8 +50,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 		startedAt := time.Now()
 		if backup.PreCommand != "" {
 			slog.Info("run pre backup command", "command", backup.PreCommand)
-			cmd := exec.Command("sh", "-c", backup.PreCommand)
-			err := cmd.Run()
+			err := utils.RunShellCommand(backup.PreCommand)
 			if err != nil {
 				m.AddResticErrorByBackupName(backup.Name)
 				slog.Error("failed to run pre backup command", "command", backup.PreCommand, "error", err)
@@ -70,8 +68,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 
 		if backup.PostCommand != "" {
 			slog.Info("run post backup command", "command", backup.PostCommand)
-			cmd := exec.Command("sh", "-c", backup.PostCommand)
-			err := cmd.Run()
+			err := utils.RunShellCommand(backup.PostCommand)
 			if err != nil {
 				m.AddResticErrorByBackupName(backup.Name)
 				slog.Error("failed to run post backup command", "command", backup.PostCommand, "error", err)
