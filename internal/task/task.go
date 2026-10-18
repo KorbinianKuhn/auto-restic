@@ -148,7 +148,8 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 	// Stream tar.gz.age to S3 with retry
 	slog.Info("create encrypted archive and upload to s3", "snapshot", snapshot.Name)
 
-	maxRetries := retries + 1
+	// Always make at least one attempt, a negative value must not skip the upload
+	maxRetries := max(retries, 0) + 1
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// Create a pipe for streaming to S3
 		pr, pw := io.Pipe()

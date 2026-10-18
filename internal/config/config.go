@@ -103,6 +103,15 @@ func validateTimeout(name string, timeout time.Duration) error {
 	return nil
 }
 
+// validateRetries rejects negative values, which would otherwise skip the
+// upload entirely
+func validateRetries(name string, retries int) error {
+	if retries < 0 {
+		return fmt.Errorf("%s must not be negative: %d", name, retries)
+	}
+	return nil
+}
+
 type Config struct {
 	Logging        LoggingConfig  `mapstructure:"logging"`
 	Restic         ResticConfig   `mapstructure:"restic"`
@@ -224,6 +233,10 @@ func Get() (Config, error) {
 		return config, err
 	}
 
+	if err := validateRetries("s3.retries", config.S3.Retries); err != nil {
+		return config, err
+	}
+
 	// Validate backup configurations
 	names := make(map[string]bool)
 	for _, backup := range config.Backups {
@@ -238,6 +251,12 @@ func Get() (Config, error) {
 
 		if err := validateTimeout(fmt.Sprintf("backups[%s].command_timeout", backup.Name), backup.CommandTimeout); err != nil {
 			return config, err
+		}
+
+		if backup.S3Retries != nil {
+			if err := validateRetries(fmt.Sprintf("backups[%s].s3_retries", backup.Name), *backup.S3Retries); err != nil {
+				return config, err
+			}
 		}
 
 		if backup.ExcludeFile != "" {
