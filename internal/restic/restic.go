@@ -20,10 +20,7 @@ func NewRestic(path, password string) (Restic, error) {
 		password:   password,
 	}
 
-	cmd := exec.Command("restic", "snapshots", "--latest=1", "--no-lock")
-	cmd.Env = r.getCommandEnv()
-
-	output, err := cmd.CombinedOutput()
+	output, err := r.run("snapshots", "--latest=1", "--no-lock")
 
 	if err == nil {
 		return r, nil
@@ -50,11 +47,16 @@ func (r Restic) getCommandEnv() []string {
 	return env
 }
 
-func (r Restic) init() error {
-	cmd := exec.Command("restic", "init")
+// run executes a restic command with the repository environment and returns
+// its combined output
+func (r Restic) run(args ...string) ([]byte, error) {
+	cmd := exec.Command("restic", args...)
 	cmd.Env = r.getCommandEnv()
+	return cmd.CombinedOutput()
+}
 
-	_, err := cmd.Output()
+func (r Restic) init() error {
+	_, err := r.run("init")
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize restic repository %s: %w", r.repository, err)
@@ -72,10 +74,7 @@ func (r Restic) BackupDirectory(name, path, exclude, excludeFile string) error {
 		args = append(args, "--exclude-file", excludeFile)
 	}
 
-	cmd := exec.Command("restic", args...)
-	cmd.Env = r.getCommandEnv()
-
-	output, err := cmd.CombinedOutput()
+	output, err := r.run(args...)
 
 	if err != nil {
 		return fmt.Errorf("failed to backup directory %s: %w %s", path, err, output)
@@ -102,10 +101,7 @@ func (r Restic) RemoveBackupDirectory(name string) (string, error) {
 
 	args := append([]string{"forget", "--prune", "--json"}, ids...)
 
-	cmd := exec.Command("restic", args...)
-	cmd.Env = r.getCommandEnv()
-
-	output, err := cmd.CombinedOutput()
+	output, err := r.run(args...)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to remove backup %s: %w %s", name, err, output)
@@ -115,10 +111,7 @@ func (r Restic) RemoveBackupDirectory(name string) (string, error) {
 }
 
 func (r Restic) Check() error {
-	cmd := exec.Command("restic", "check")
-	cmd.Env = r.getCommandEnv()
-
-	_, err := cmd.Output()
+	_, err := r.run("check")
 
 	if err != nil {
 		return fmt.Errorf("failed to check restic repository: %w", err)
@@ -128,10 +121,7 @@ func (r Restic) Check() error {
 }
 
 func (r Restic) ForgetAndPrune(keepDaily, keepWeekly, keepMonthly int) error {
-	cmd := exec.Command("restic", "forget", "--prune", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
-	cmd.Env = r.getCommandEnv()
-
-	_, err := cmd.Output()
+	_, err := r.run("forget", "--prune", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
 
 	if err != nil {
 		return fmt.Errorf("failed to forget old backups: %w", err)
@@ -194,10 +184,7 @@ func (s snapshotJson) toInternalSnapshot() Snapshot {
 }
 
 func (r Restic) ListSnapshots() ([]Snapshot, error) {
-	cmd := exec.Command("restic", "snapshots", "--no-lock", "--json")
-	cmd.Env = r.getCommandEnv()
-
-	output, err := cmd.CombinedOutput()
+	output, err := r.run("snapshots", "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
@@ -218,10 +205,7 @@ func (r Restic) ListSnapshots() ([]Snapshot, error) {
 }
 
 func (r Restic) listSnapshotsByName(name string) ([]Snapshot, error) {
-	cmd := exec.Command("restic", "snapshots", "--tag", fmt.Sprintf("name=%s", name), "--no-lock", "--json")
-	cmd.Env = r.getCommandEnv()
-
-	output, err := cmd.CombinedOutput()
+	output, err := r.run("snapshots", "--tag", fmt.Sprintf("name=%s", name), "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots by name: %w %s", err, output)
@@ -242,10 +226,7 @@ func (r Restic) listSnapshotsByName(name string) ([]Snapshot, error) {
 }
 
 func (r Restic) ListLatestSnapshots() ([]Snapshot, error) {
-	cmd := exec.Command("restic", "snapshots", "--latest=1", "--no-lock", "--json")
-	cmd.Env = r.getCommandEnv()
-
-	output, err := cmd.CombinedOutput()
+	output, err := r.run("snapshots", "--latest=1", "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
@@ -276,9 +257,7 @@ type SnapshotStats struct {
 }
 
 func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
-	cmd := exec.Command("restic", "stats", "--json", "--mode", "raw-data", "--no-lock", "--tag", fmt.Sprintf("name=%s", name))
-	cmd.Env = r.getCommandEnv()
-	output, err := cmd.CombinedOutput()
+	output, err := r.run("stats", "--json", "--mode", "raw-data", "--no-lock", "--tag", fmt.Sprintf("name=%s", name))
 
 	if err != nil {
 		return SnapshotStats{}, fmt.Errorf("failed to get snapshot stats: %w %s", err, output)
@@ -294,10 +273,7 @@ func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
 }
 
 func (r Restic) Restore(snapshot, path string) error {
-	cmd := exec.Command("restic", "restore", snapshot, "--target", path, "--no-lock")
-	cmd.Env = r.getCommandEnv()
-
-	output, err := cmd.CombinedOutput()
+	output, err := r.run("restore", snapshot, "--target", path, "--no-lock")
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot: %s %w %s", snapshot, err, output)
 	}
