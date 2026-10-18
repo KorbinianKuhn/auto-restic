@@ -318,7 +318,13 @@ func updateS3Metrics(c config.Config, m *metrics.Metrics, s *s3.S3) error {
 	return nil
 }
 
-func UpdateAllMetrics(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) error {
+func UpdateAllMetrics(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) {
+	if err := updateAllMetrics(c, m, r, s); err != nil {
+		slog.Error("failed to update metrics", "error", err)
+	}
+}
+
+func updateAllMetrics(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) error {
 	err := updateResticMetrics(c, m, r)
 	if err != nil {
 		return fmt.Errorf("failed to update restic metrics: %w", err)

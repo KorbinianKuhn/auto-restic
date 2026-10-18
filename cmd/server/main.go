@@ -65,51 +65,56 @@ func main() {
 	// Schedule jobs
 	scheduler, err := gocron.NewScheduler(
 		gocron.WithLimitConcurrentJobs(1, gocron.LimitModeWait),
+		// gocron recovers job panics and reports them only via its logger
+		gocron.WithLogger(slog.Default()),
 	)
-	if err != nil {
-		panicOnError("failed to create scheduler", err)
-	}
+	panicOnError("failed to create scheduler", err)
 
 	// Pre backup scripts and restic snapshot creation
-	scheduler.NewJob(
+	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.Backup, true),
 		gocron.NewTask(func() {
 			task.Backup(c, m, r)
 		}),
 	)
+	panicOnError("failed to schedule backup job", err)
 
 	// restic check
-	scheduler.NewJob(
+	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.Check, true),
 		gocron.NewTask(func() {
 			task.ResticCheck(m, r)
 		}),
 	)
+	panicOnError("failed to schedule check job", err)
 
 	// restic forget and prune
-	scheduler.NewJob(
+	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.Prune, true),
 		gocron.NewTask(func() {
 			task.ForgetAndPrune(c, m, r)
 		}),
 	)
+	panicOnError("failed to schedule prune job", err)
 
 	// S3 backup
-	scheduler.NewJob(
+	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.S3, true),
 		gocron.NewTask(func() {
 			task.S3Backup(c, m, r, s)
 		}),
 	)
+	panicOnError("failed to schedule s3 job", err)
 
 	// Capture restic and s3 stats at startup and regular intervals
-	scheduler.NewJob(
+	_, err = scheduler.NewJob(
 		gocron.CronJob(c.Cron.Metrics, true),
 		gocron.NewTask(func() {
 			task.UpdateAllMetrics(c, m, r, s)
 		}),
 		gocron.JobOption(gocron.WithStartImmediately()),
 	)
+	panicOnError("failed to schedule metrics job", err)
 
 	// Start scheduler
 	scheduler.Start()
