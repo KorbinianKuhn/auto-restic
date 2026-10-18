@@ -78,6 +78,7 @@ type S3Config struct {
 	Passphrase string        `mapstructure:"passphrase"`
 	Retries    int           `mapstructure:"retries"`
 	Timeout    time.Duration `mapstructure:"timeout"`
+	Secure     bool          `mapstructure:"secure"`
 }
 
 type BackupConfig struct {
@@ -161,6 +162,7 @@ func Get() (Config, error) {
 	_ = v.BindEnv("s3.passphrase")
 	_ = v.BindEnv("s3.retries")
 	_ = v.BindEnv("s3.timeout")
+	_ = v.BindEnv("s3.secure")
 
 	// Default values
 	v.SetDefault("logging.level", "info")
@@ -176,6 +178,7 @@ func Get() (Config, error) {
 	v.SetDefault("cron.prune", "0 3 2 * * 0")   // Every Sunday 02:03
 	v.SetDefault("metrics_enabled", true)
 	v.SetDefault("s3.retries", 2)
+	v.SetDefault("s3.secure", true)
 
 	// Optionally load config file
 	if err := v.ReadInConfig(); err != nil {

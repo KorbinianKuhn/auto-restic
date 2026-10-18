@@ -42,7 +42,7 @@ func main() {
 	slog.Info("restic initialized")
 
 	// Initialize S3
-	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket, s3.WithTimeout(c.S3.Timeout))
+	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket, c.S3.Secure, s3.WithTimeout(c.S3.Timeout))
 	panicOnError("failed to initialize s3", err)
 	slog.Info("s3 initialized")
 

@@ -33,10 +33,11 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-func Get(accessKey, secretKey, endpoint, bucket string, opts ...Option) (*S3, error) {
+// Get connects to the bucket at endpoint, using HTTPS if secure is set
+func Get(accessKey, secretKey, endpoint, bucket string, secure bool, opts ...Option) (*S3, error) {
 	c, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: true,
+		Secure: secure,
 	})
 
 	if err != nil {

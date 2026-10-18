@@ -52,6 +52,7 @@ cron:
   prune: "0 3 2 * * 0" # Every Sunday 02:03
 
 s3:
+  secure: true # Use HTTPS, set to false for a plain-HTTP endpoint (e.g. a local MinIO). Default = true
   retries: 2 # Additional attempts. Default = 2
   timeout: 0 # Abort a single upload attempt, e.g. 2h. Default = 0 (no timeout)
 
