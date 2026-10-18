@@ -2,6 +2,7 @@ package task
 
 import (
 	"archive/tar"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -49,32 +50,13 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	slog.Info("starting restic backups")
 	for _, backup := range c.Backups {
 		startedAt := time.Now()
-		if backup.PreCommand != "" {
-			slog.Info("run pre backup command", "command", backup.PreCommand)
-			err := utils.RunShellCommand(backup.PreCommand, backup.CommandTimeout)
-			if err != nil {
-				m.AddResticErrorByBackupName(backup.Name)
-				slog.Error("failed to run pre backup command", "command", backup.PreCommand, "error", err)
-				continue
-			}
-		}
-
-		slog.Info("create restic snapshot", "paths", backup.Path)
-		err := r.BackupDirectory(backup.Name, backup.Path, backup.Exclude, backup.ExcludeFile)
+		err := runBackup(backup, func() error {
+			return r.BackupDirectory(backup.Name, backup.Path, backup.Exclude, backup.ExcludeFile)
+		})
 		if err != nil {
 			m.AddResticErrorByBackupName(backup.Name)
-			slog.Error("failed to backup directory", "directory", backup.Path, "error", err)
+			slog.Error("failed to backup", "backup", backup.Name, "error", err)
 			continue
-		}
-
-		if backup.PostCommand != "" {
-			slog.Info("run post backup command", "command", backup.PostCommand)
-			err := utils.RunShellCommand(backup.PostCommand, backup.CommandTimeout)
-			if err != nil {
-				m.AddResticErrorByBackupName(backup.Name)
-				slog.Error("failed to run post backup command", "command", backup.PostCommand, "error", err)
-				continue
-			}
 		}
 		slog.Info("finished restic snapshot", "paths", backup.Path)
 		duration := time.Since(startedAt)
@@ -87,6 +69,34 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	}
 
 	slog.Info("restic backups completed")
+}
+
+// runBackup runs pre_command, the restic backup and post_command. Once
+// pre_command succeeded, post_command always runs, even if the backup failed,
+// so pairs like "stop service"/"start service" never leave a service stopped.
+func runBackup(backup config.BackupConfig, backupFn func() error) (err error) {
+	if backup.PreCommand != "" {
+		slog.Info("run pre backup command", "command", backup.PreCommand)
+		if err := utils.RunShellCommand(backup.PreCommand, backup.CommandTimeout); err != nil {
+			return fmt.Errorf("failed to run pre backup command %q: %w", backup.PreCommand, err)
+		}
+	}
+
+	if backup.PostCommand != "" {
+		defer func() {
+			slog.Info("run post backup command", "command", backup.PostCommand)
+			if postErr := utils.RunShellCommand(backup.PostCommand, backup.CommandTimeout); postErr != nil {
+				err = errors.Join(err, fmt.Errorf("failed to run post backup command %q: %w", backup.PostCommand, postErr))
+			}
+		}()
+	}
+
+	slog.Info("create restic snapshot", "paths", backup.Path)
+	if err := backupFn(); err != nil {
+		return fmt.Errorf("failed to backup directory %s: %w", backup.Path, err)
+	}
+
+	return nil
 }
 
 func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) error {
