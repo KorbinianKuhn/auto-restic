@@ -62,6 +62,11 @@ func ExtractTar(r io.Reader, dest string) error {
 		if !isWithin(dest, targetPath) {
 			return fmt.Errorf("illegal path outside of destination in archive: %s", header.Name)
 		}
+		// Symlinks are restored as-is and may point anywhere, so never write
+		// an entry through one
+		if err := checkNoSymlink(dest, targetPath); err != nil {
+			return fmt.Errorf("illegal path in archive: %s: %w", header.Name, err)
+		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -80,16 +85,6 @@ func ExtractTar(r io.Reader, dest string) error {
 				return fmt.Errorf("failed to extract file %s: %w", targetPath, err)
 			}
 		case tar.TypeSymlink:
-			// Reject symlinks pointing outside of dest, later entries could
-			// otherwise be written through them
-			linkTarget := header.Linkname
-			if !filepath.IsAbs(linkTarget) {
-				linkTarget = filepath.Join(filepath.Dir(targetPath), linkTarget)
-			}
-			if !isWithin(dest, linkTarget) {
-				return fmt.Errorf("illegal symlink outside of destination in archive: %s -> %s", header.Name, header.Linkname)
-			}
-
 			// Create parent directory if it doesn't exist
 			parentDir := filepath.Dir(targetPath)
 			if err := os.MkdirAll(parentDir, 0755); err != nil {
@@ -101,6 +96,30 @@ func ExtractTar(r io.Reader, dest string) error {
 			}
 		default:
 			// Skip unsupported file types
+		}
+	}
+	return nil
+}
+
+// checkNoSymlink returns an error if target or any existing path component
+// between dest and target is a symlink
+func checkNoSymlink(dest, target string) error {
+	rel, err := filepath.Rel(dest, target)
+	if err != nil || rel == "." {
+		return err
+	}
+	path := dest
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		path = filepath.Join(path, part)
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is a symlink", path)
 		}
 	}
 	return nil

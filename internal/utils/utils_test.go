@@ -104,6 +104,9 @@ func TestExtractTar(t *testing.T) {
 		{name: "nested/file.txt", typeflag: tar.TypeReg, body: "hello", mode: 0444},
 		{name: "nested/other.txt", typeflag: tar.TypeReg, body: "world"},
 		{name: "dir/link", typeflag: tar.TypeSymlink, linkname: "../nested/file.txt"},
+		// Symlinks are restored as-is, even if they point outside of dest
+		{name: "localtime", typeflag: tar.TypeSymlink, linkname: "/etc/localtime"},
+		{name: "dir/up", typeflag: tar.TypeSymlink, linkname: "../../outside"},
 	})
 
 	if err := ExtractTar(archive, dest); err != nil {
@@ -118,6 +121,12 @@ func TestExtractTar(t *testing.T) {
 	if err != nil || string(content) != "world" {
 		t.Fatalf("expected file content, got %q (%v)", content, err)
 	}
+	for link, want := range map[string]string{"localtime": "/etc/localtime", "dir/up": "../../outside"} {
+		got, err := os.Readlink(filepath.Join(dest, link))
+		if err != nil || got != want {
+			t.Fatalf("expected symlink %s -> %s, got %q (%v)", link, want, got, err)
+		}
+	}
 }
 
 func TestExtractTarRejectsEscapes(t *testing.T) {
@@ -125,23 +134,39 @@ func TestExtractTarRejectsEscapes(t *testing.T) {
 		"parent traversal": {{name: "../evil.txt", typeflag: tar.TypeReg, body: "x"}},
 		"nested traversal": {{name: "a/../../evil.txt", typeflag: tar.TypeReg, body: "x"}},
 		"absolute path":    {{name: "/tmp/evil.txt", typeflag: tar.TypeReg, body: "x"}},
-		"absolute symlink": {{name: "link", typeflag: tar.TypeSymlink, linkname: "/etc"}},
-		"relative symlink": {{name: "a/link", typeflag: tar.TypeSymlink, linkname: "../../outside"}},
 		"write through symlink": {
 			{name: "link", typeflag: tar.TypeSymlink, linkname: ".."},
 			{name: "link/evil.txt", typeflag: tar.TypeReg, body: "x"},
+		},
+		"write through absolute symlink": {
+			{name: "a/link", typeflag: tar.TypeSymlink, linkname: "{root}"},
+			{name: "a/link/evil.txt", typeflag: tar.TypeReg, body: "x"},
+		},
+		"directory through symlink": {
+			{name: "link", typeflag: tar.TypeSymlink, linkname: "{root}"},
+			{name: "link/sub", typeflag: tar.TypeDir, mode: 0755},
+		},
+		"overwrite symlink target": {
+			{name: "link", typeflag: tar.TypeSymlink, linkname: "{root}/evil.txt"},
+			{name: "link", typeflag: tar.TypeReg, body: "x"},
 		},
 	}
 	for name, entries := range tests {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			dest := filepath.Join(root, "dest")
+			for i := range entries {
+				entries[i].linkname = strings.ReplaceAll(entries[i].linkname, "{root}", root)
+			}
 			err := ExtractTar(buildTar(t, entries), dest)
 			if err == nil || !strings.Contains(err.Error(), "illegal") {
 				t.Fatalf("expected illegal path error, got %v", err)
 			}
 			if _, err := os.Stat(filepath.Join(root, "evil.txt")); !os.IsNotExist(err) {
 				t.Fatalf("file was written outside of destination")
+			}
+			if _, err := os.Stat(filepath.Join(root, "sub")); !os.IsNotExist(err) {
+				t.Fatalf("directory was created outside of destination")
 			}
 		})
 	}
