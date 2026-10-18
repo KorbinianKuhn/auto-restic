@@ -50,7 +50,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 		startedAt := time.Now()
 		if backup.PreCommand != "" {
 			slog.Info("run pre backup command", "command", backup.PreCommand)
-			err := utils.RunShellCommand(backup.PreCommand)
+			err := utils.RunShellCommand(backup.PreCommand, backup.CommandTimeout)
 			if err != nil {
 				m.AddResticErrorByBackupName(backup.Name)
 				slog.Error("failed to run pre backup command", "command", backup.PreCommand, "error", err)
@@ -68,7 +68,7 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 
 		if backup.PostCommand != "" {
 			slog.Info("run post backup command", "command", backup.PostCommand)
-			err := utils.RunShellCommand(backup.PostCommand)
+			err := utils.RunShellCommand(backup.PostCommand, backup.CommandTimeout)
 			if err != nil {
 				m.AddResticErrorByBackupName(backup.Name)
 				slog.Error("failed to run post backup command", "command", backup.PostCommand, "error", err)
