@@ -97,3 +97,26 @@ backups:
 		t.Errorf("expected no s3_retries override, got %d", *c.Backups[1].S3Retries)
 	}
 }
+
+func TestNegativeS3Retries(t *testing.T) {
+	setup(t, "s3:\n  retries: -1\n")
+	_, err := Get()
+	if err == nil || !strings.Contains(err.Error(), "s3.retries") {
+		t.Fatalf("expected retries validation error, got %v", err)
+	}
+	t.Setenv("S3_RETRIES", "0")
+	if _, err := Get(); err != nil {
+		t.Fatalf("expected zero retries to be valid, got %v", err)
+	}
+}
+
+func TestValidateRetries(t *testing.T) {
+	if err := validateRetries("backups[data].s3_retries", -1); err == nil || !strings.Contains(err.Error(), "backups[data].s3_retries") {
+		t.Fatalf("expected validation error, got %v", err)
+	}
+	for _, retries := range []int{0, 3} {
+		if err := validateRetries("s3.retries", retries); err != nil {
+			t.Fatalf("expected %d to be valid, got %v", retries, err)
+		}
+	}
+}

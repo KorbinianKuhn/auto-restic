@@ -2,10 +2,12 @@ package task
 
 import (
 	"archive/tar"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"filippo.io/age"
@@ -48,32 +50,13 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	slog.Info("starting restic backups")
 	for _, backup := range c.Backups {
 		startedAt := time.Now()
-		if backup.PreCommand != "" {
-			slog.Info("run pre backup command", "command", backup.PreCommand)
-			err := utils.RunShellCommand(backup.PreCommand, backup.CommandTimeout)
-			if err != nil {
-				m.AddResticErrorByBackupName(backup.Name)
-				slog.Error("failed to run pre backup command", "command", backup.PreCommand, "error", err)
-				continue
-			}
-		}
-
-		slog.Info("create restic snapshot", "paths", backup.Path)
-		err := r.BackupDirectory(backup.Name, backup.Path, backup.Exclude, backup.ExcludeFile)
+		err := runBackup(backup, func() error {
+			return r.BackupDirectory(backup.Name, backup.Path, backup.Exclude, backup.ExcludeFile)
+		})
 		if err != nil {
 			m.AddResticErrorByBackupName(backup.Name)
-			slog.Error("failed to backup directory", "directory", backup.Path, "error", err)
+			slog.Error("failed to backup", "backup", backup.Name, "error", err)
 			continue
-		}
-
-		if backup.PostCommand != "" {
-			slog.Info("run post backup command", "command", backup.PostCommand)
-			err := utils.RunShellCommand(backup.PostCommand, backup.CommandTimeout)
-			if err != nil {
-				m.AddResticErrorByBackupName(backup.Name)
-				slog.Error("failed to run post backup command", "command", backup.PostCommand, "error", err)
-				continue
-			}
 		}
 		slog.Info("finished restic snapshot", "paths", backup.Path)
 		duration := time.Since(startedAt)
@@ -86,6 +69,34 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	}
 
 	slog.Info("restic backups completed")
+}
+
+// runBackup runs pre_command, the restic backup and post_command. Once
+// pre_command succeeded, post_command always runs, even if the backup failed,
+// so pairs like "stop service"/"start service" never leave a service stopped.
+func runBackup(backup config.BackupConfig, backupFn func() error) (err error) {
+	if backup.PreCommand != "" {
+		slog.Info("run pre backup command", "command", backup.PreCommand)
+		if err := utils.RunShellCommand(backup.PreCommand, backup.CommandTimeout); err != nil {
+			return fmt.Errorf("failed to run pre backup command %q: %w", backup.PreCommand, err)
+		}
+	}
+
+	if backup.PostCommand != "" {
+		defer func() {
+			slog.Info("run post backup command", "command", backup.PostCommand)
+			if postErr := utils.RunShellCommand(backup.PostCommand, backup.CommandTimeout); postErr != nil {
+				err = errors.Join(err, fmt.Errorf("failed to run post backup command %q: %w", backup.PostCommand, postErr))
+			}
+		}()
+	}
+
+	slog.Info("create restic snapshot", "paths", backup.Path)
+	if err := backupFn(); err != nil {
+		return fmt.Errorf("failed to backup directory %s: %w", backup.Path, err)
+	}
+
+	return nil
 }
 
 func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) error {
@@ -148,7 +159,8 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 	// Stream tar.gz.age to S3 with retry
 	slog.Info("create encrypted archive and upload to s3", "snapshot", snapshot.Name)
 
-	maxRetries := retries + 1
+	// Always make at least one attempt, a negative value must not skip the upload
+	maxRetries := max(retries, 0) + 1
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		// Create a pipe for streaming to S3
 		pr, pw := io.Pipe()
@@ -283,45 +295,58 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 }
 
 func updateS3Metrics(c config.Config, m *metrics.Metrics, s *s3.S3) error {
-	count := map[string]int{}
-	totalSize := map[string]int64{}
-	latestSize := map[string]int64{}
-	latestTime := map[string]float64{}
-
-	for _, backup := range c.Backups {
-		count[backup.Name] = 0
-		totalSize[backup.Name] = 0
-		latestSize[backup.Name] = 0
-		latestTime[backup.Name] = 0
-	}
-
 	objects, err := s.ListObjects()
 	if err != nil {
 		m.AddSchedulerError(metrics.SchedulerErrorS3ListObjects)
 		return fmt.Errorf("failed to list s3 objects: %w", err)
 	}
 
-	for _, object := range objects {
-		count[object.BackupName] = 0
-		totalSize[object.BackupName] = 0
-		latestSize[object.BackupName] = 0
-		latestTime[object.BackupName] = 0
+	backupNames := make([]string, 0, len(c.Backups))
+	for _, backup := range c.Backups {
+		backupNames = append(backupNames, backup.Name)
 	}
 
-	for _, object := range objects {
-		count[object.BackupName]++
-		totalSize[object.BackupName] += object.Size
-		if object.IsLatest {
-			latestSize[object.BackupName] = object.Size
-			latestTime[object.BackupName] = float64(object.CreatedAt.Unix())
-		}
-	}
-
-	for name, c := range count {
-		m.SetS3StatsByBackupName(name, c, totalSize[name], latestSize[name], latestTime[name])
+	for name, stats := range aggregateS3Stats(objects, backupNames) {
+		m.SetS3StatsByBackupName(name, stats.count, stats.totalSize, stats.latestSize, stats.latestTime)
 	}
 
 	return nil
+}
+
+type s3Stats struct {
+	count      int
+	totalSize  int64
+	latestSize int64
+	latestTime float64
+}
+
+// aggregateS3Stats returns the stats for every configured backup name. Delete
+// markers, keys that are no backup archive and unconfigured backup names are
+// ignored, so the reported label set stays stable.
+func aggregateS3Stats(objects []s3.S3Object, backupNames []string) map[string]s3Stats {
+	stats := make(map[string]s3Stats, len(backupNames))
+	for _, name := range backupNames {
+		stats[name] = s3Stats{}
+	}
+
+	for _, object := range objects {
+		if object.IsDeleteMarker || !strings.HasSuffix(object.Key, ".tar.gz.age") {
+			continue
+		}
+		s, ok := stats[object.BackupName]
+		if !ok {
+			continue
+		}
+		s.count++
+		s.totalSize += object.Size
+		if object.IsLatest {
+			s.latestSize = object.Size
+			s.latestTime = float64(object.CreatedAt.Unix())
+		}
+		stats[object.BackupName] = s
+	}
+
+	return stats
 }
 
 func UpdateAllMetrics(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) {

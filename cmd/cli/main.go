@@ -117,7 +117,7 @@ func main() {
 	resticRemoveCmd := &cobra.Command{
 		Use:   "rm",
 		Short: "Remove restic backups by name",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			backupName, _ := cmd.Flags().GetString("name")
 
@@ -186,6 +186,9 @@ func main() {
 			fmt.Fprintln(w, "Object-Key\tDate\tVersion\tSize")
 			fmt.Fprintln(w, "----------\t----\t-------\t----")
 			for _, o := range objects {
+				if o.IsDeleteMarker {
+					continue
+				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", o.Key, o.CreatedAt.Format("2006-01-02 15:04:05"), o.VersionID, o.Size)
 			}
 			w.Flush()
