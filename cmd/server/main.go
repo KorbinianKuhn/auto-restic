@@ -37,12 +37,12 @@ func main() {
 	panicOnError("failed to load config", err)
 
 	// Initialize restic
-	r, err := restic.NewRestic(c.Restic.Repository, c.Restic.Password)
+	r, err := restic.NewRestic(c.Restic.Repository, c.Restic.Password, restic.WithTimeout(c.Restic.Timeout))
 	panicOnError("failed to initialize restic", err)
 	slog.Info("restic initialized")
 
 	// Initialize S3
-	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket)
+	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket, s3.WithTimeout(c.S3.Timeout))
 	panicOnError("failed to initialize s3", err)
 	slog.Info("s3 initialized")
 

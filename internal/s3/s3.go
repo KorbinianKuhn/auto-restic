@@ -7,16 +7,33 @@ import (
 	"strings"
 	"time"
 
+	"github.com/korbiniankuhn/auto-restic/internal/utils"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+// queryTimeout applies to single API calls (bucket check, object listing).
+// The bucket only holds one object per backup plus its versions, so these
+// finish within seconds and 1 minute leaves plenty of headroom.
+const queryTimeout = time.Minute
+
 type S3 struct {
-	client *minio.Client
-	bucket string
+	client  *minio.Client
+	bucket  string
+	timeout time.Duration
 }
 
-func Get(accessKey, secretKey, endpoint, bucket string) (*S3, error) {
+type Option func(*S3)
+
+// WithTimeout aborts a single upload attempt after timeout. 0 disables the
+// timeout.
+func WithTimeout(timeout time.Duration) Option {
+	return func(s *S3) {
+		s.timeout = timeout
+	}
+}
+
+func Get(accessKey, secretKey, endpoint, bucket string, opts ...Option) (*S3, error) {
 	c, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: true,
@@ -26,7 +43,11 @@ func Get(accessKey, secretKey, endpoint, bucket string) (*S3, error) {
 		return nil, fmt.Errorf("invalid s3 credentials or endpoint: %w", err)
 	}
 
-	exists, err := c.BucketExists(context.TODO(), bucket)
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	exists, err := c.BucketExists(ctx, bucket)
+	err = utils.WrapTimeout(ctx, "s3 bucket check", queryTimeout, err)
 	if err != nil {
 		return nil, fmt.Errorf("unable to check if bucket exists: %w", err)
 	}
@@ -37,6 +58,9 @@ func Get(accessKey, secretKey, endpoint, bucket string) (*S3, error) {
 	s3 := &S3{
 		client: c,
 		bucket: bucket,
+	}
+	for _, opt := range opts {
+		opt(s3)
 	}
 
 	return s3, nil
@@ -53,13 +77,17 @@ type S3Object struct {
 }
 
 func (s3 S3) ListObjects() ([]S3Object, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
 	objects := []S3Object{}
-	for obj := range s3.client.ListObjects(context.TODO(), s3.bucket, minio.ListObjectsOptions{
+	for obj := range s3.client.ListObjects(ctx, s3.bucket, minio.ListObjectsOptions{
 		WithVersions: true,
 		WithMetadata: true,
 	}) {
 		if obj.Err != nil {
-			return []S3Object{}, fmt.Errorf("failed to list objects: %w", obj.Err)
+			err := utils.WrapTimeout(ctx, "s3 list objects", queryTimeout, obj.Err)
+			return []S3Object{}, fmt.Errorf("failed to list objects: %w", err)
 		}
 
 		objects = append(objects, S3Object{
@@ -77,9 +105,13 @@ func (s3 S3) ListObjects() ([]S3Object, error) {
 }
 
 func (s3 S3) StreamUploadFile(filename string, reader *io.PipeReader) error {
-	_, err := s3.client.PutObject(context.TODO(), s3.bucket, filename, reader, -1, minio.PutObjectOptions{
+	ctx, cancel := utils.ContextWithOptionalTimeout(s3.timeout)
+	defer cancel()
+
+	_, err := s3.client.PutObject(ctx, s3.bucket, filename, reader, -1, minio.PutObjectOptions{
 		PartSize: 64 * 1024 * 1024, // 64MB parts for multipart upload
 	})
+	err = utils.WrapTimeout(ctx, "s3 upload", s3.timeout, err)
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}

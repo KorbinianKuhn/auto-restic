@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -52,11 +53,12 @@ func (c *LoggingConfig) Parse() error {
 }
 
 type ResticConfig struct {
-	Password    string `mapstructure:"password"`
-	Repository  string `mapstructure:"repository"`
-	KeepDaily   int    `mapstructure:"keep_daily"`
-	KeepWeekly  int    `mapstructure:"keep_weekly"`
-	KeepMonthly int    `mapstructure:"keep_monthly"`
+	Password    string        `mapstructure:"password"`
+	Repository  string        `mapstructure:"repository"`
+	KeepDaily   int           `mapstructure:"keep_daily"`
+	KeepWeekly  int           `mapstructure:"keep_weekly"`
+	KeepMonthly int           `mapstructure:"keep_monthly"`
+	Timeout     time.Duration `mapstructure:"timeout"`
 }
 
 type CronConfig struct {
@@ -68,12 +70,13 @@ type CronConfig struct {
 }
 
 type S3Config struct {
-	AccessKey  string `mapstructure:"access_key"`
-	SecretKey  string `mapstructure:"secret_key"`
-	Endpoint   string `mapstructure:"endpoint"`
-	Bucket     string `mapstructure:"bucket"`
-	Passphrase string `mapstructure:"passphrase"`
-	Retries    int    `mapstructure:"retries"`
+	AccessKey  string        `mapstructure:"access_key"`
+	SecretKey  string        `mapstructure:"secret_key"`
+	Endpoint   string        `mapstructure:"endpoint"`
+	Bucket     string        `mapstructure:"bucket"`
+	Passphrase string        `mapstructure:"passphrase"`
+	Retries    int           `mapstructure:"retries"`
+	Timeout    time.Duration `mapstructure:"timeout"`
 }
 
 type BackupConfig struct {
@@ -84,6 +87,20 @@ type BackupConfig struct {
 	PreCommand  string `mapstructure:"pre_command"`
 	PostCommand string `mapstructure:"post_command"`
 	S3Retries   *int   `mapstructure:"retries"`
+	// Timeout for pre_command and post_command
+	CommandTimeout time.Duration `mapstructure:"command_timeout"`
+}
+
+// validateTimeout rejects negative values and values below one second, which
+// usually means the unit is missing (a plain 3600 is parsed as nanoseconds)
+func validateTimeout(name string, timeout time.Duration) error {
+	if timeout < 0 {
+		return fmt.Errorf("%s must not be negative: %s", name, timeout)
+	}
+	if timeout > 0 && timeout < time.Second {
+		return fmt.Errorf("%s is below one second, missing unit (e.g. 30m, 6h)?: %s", name, timeout)
+	}
+	return nil
 }
 
 type Config struct {
@@ -116,6 +133,7 @@ func Get() (Config, error) {
 	_ = v.BindEnv("restic.keep_daily")
 	_ = v.BindEnv("restic.keep_weekly")
 	_ = v.BindEnv("restic.keep_monthly")
+	_ = v.BindEnv("restic.timeout")
 	_ = v.BindEnv("cron.backup")
 	_ = v.BindEnv("cron.check")
 	_ = v.BindEnv("cron.prune")
@@ -128,6 +146,7 @@ func Get() (Config, error) {
 	_ = v.BindEnv("s3.bucket")
 	_ = v.BindEnv("s3.passphrase")
 	_ = v.BindEnv("s3.retries")
+	_ = v.BindEnv("s3.timeout")
 
 	// Default values
 	v.SetDefault("logging.level", "info")
@@ -197,6 +216,14 @@ func Get() (Config, error) {
 		return config, fmt.Errorf("S3_PASSPHRASE is required")
 	}
 
+	if err := validateTimeout("restic.timeout", config.Restic.Timeout); err != nil {
+		return config, err
+	}
+
+	if err := validateTimeout("s3.timeout", config.S3.Timeout); err != nil {
+		return config, err
+	}
+
 	// Validate backup configurations
 	names := make(map[string]bool)
 	for _, backup := range config.Backups {
@@ -208,6 +235,10 @@ func Get() (Config, error) {
 			return config, fmt.Errorf("duplicate backup name: %s", backup.Name)
 		}
 		names[backup.Name] = true
+
+		if err := validateTimeout(fmt.Sprintf("backups[%s].command_timeout", backup.Name), backup.CommandTimeout); err != nil {
+			return config, err
+		}
 
 		if backup.ExcludeFile != "" {
 			_, err := os.Stat(backup.ExcludeFile)

@@ -12,10 +12,27 @@ import (
 	"time"
 )
 
-// RunShellCommand runs command via "sh -c"
-func RunShellCommand(command string) error {
-	cmd := exec.Command("sh", "-c", command)
-	return cmd.Run()
+// RunShellCommand runs command via "sh -c". On timeout (0 disables it) the
+// whole process group is killed, so children like "docker exec" stop as well.
+func RunShellCommand(command string, timeout time.Duration) error {
+	ctx, cancel := ContextWithOptionalTimeout(timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	if timeout > 0 {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error {
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		// Don't wait for orphans that still hold the output pipe
+		cmd.WaitDelay = 10 * time.Second
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w %s", WrapTimeout(ctx, "shell command", timeout, err), output)
+	}
+	return nil
 }
 
 func ExtractTar(r io.Reader, dest string) error {

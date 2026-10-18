@@ -7,20 +7,45 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/korbiniankuhn/auto-restic/internal/utils"
 )
+
+// queryTimeout applies to commands that only read snapshot metadata without
+// a lock (snapshots, init). They normally finish within seconds, so 5 minutes
+// leaves plenty of headroom for slow backends.
+const queryTimeout = 5 * time.Minute
+
+// interruptGracePeriod is how long restic may take to release its repository
+// lock after SIGINT before it gets killed
+const interruptGracePeriod = time.Minute
 
 type Restic struct {
 	repository string
 	password   string
+	timeout    time.Duration
 }
 
-func NewRestic(path, password string) (Restic, error) {
+type Option func(*Restic)
+
+// WithTimeout aborts long-running restic commands (backup, restore, check,
+// forget --prune, stats) after timeout. 0 disables the timeout.
+func WithTimeout(timeout time.Duration) Option {
+	return func(r *Restic) {
+		r.timeout = timeout
+	}
+}
+
+func NewRestic(path, password string, opts ...Option) (Restic, error) {
 	r := Restic{
 		repository: path,
 		password:   password,
 	}
+	for _, opt := range opts {
+		opt(&r)
+	}
 
-	output, err := r.run("snapshots", "--latest=1", "--no-lock")
+	output, err := r.run(queryTimeout, "snapshots", "--latest=1", "--no-lock")
 
 	if err == nil {
 		return r, nil
@@ -48,18 +73,28 @@ func (r Restic) getCommandEnv() []string {
 }
 
 // run executes a restic command with the repository environment and returns
-// its combined output
-func (r Restic) run(args ...string) ([]byte, error) {
-	cmd := exec.Command("restic", args...)
+// its combined output. On timeout (0 disables it) restic receives SIGINT so it
+// can release its repository lock, and is killed if it does not exit in time.
+func (r Restic) run(timeout time.Duration, args ...string) ([]byte, error) {
+	ctx, cancel := utils.ContextWithOptionalTimeout(timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "restic", args...)
 	cmd.Env = r.getCommandEnv()
-	return cmd.CombinedOutput()
+	cmd.Cancel = func() error {
+		return cmd.Process.Signal(os.Interrupt)
+	}
+	cmd.WaitDelay = interruptGracePeriod
+
+	output, err := cmd.CombinedOutput()
+	return output, utils.WrapTimeout(ctx, "restic "+args[0], timeout, err)
 }
 
 func (r Restic) init() error {
-	_, err := r.run("init")
+	output, err := r.run(queryTimeout, "init")
 
 	if err != nil {
-		return fmt.Errorf("failed to initialize restic repository %s: %w", r.repository, err)
+		return fmt.Errorf("failed to initialize restic repository %s: %w %s", r.repository, err, output)
 	}
 
 	return nil
@@ -74,7 +109,7 @@ func (r Restic) BackupDirectory(name, path, exclude, excludeFile string) error {
 		args = append(args, "--exclude-file", excludeFile)
 	}
 
-	output, err := r.run(args...)
+	output, err := r.run(r.timeout, args...)
 
 	if err != nil {
 		return fmt.Errorf("failed to backup directory %s: %w %s", path, err, output)
@@ -101,7 +136,7 @@ func (r Restic) RemoveBackupDirectory(name string) (string, error) {
 
 	args := append([]string{"forget", "--prune", "--json"}, ids...)
 
-	output, err := r.run(args...)
+	output, err := r.run(r.timeout, args...)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to remove backup %s: %w %s", name, err, output)
@@ -111,20 +146,20 @@ func (r Restic) RemoveBackupDirectory(name string) (string, error) {
 }
 
 func (r Restic) Check() error {
-	_, err := r.run("check")
+	output, err := r.run(r.timeout, "check")
 
 	if err != nil {
-		return fmt.Errorf("failed to check restic repository: %w", err)
+		return fmt.Errorf("failed to check restic repository: %w %s", err, output)
 	}
 
 	return nil
 }
 
 func (r Restic) ForgetAndPrune(keepDaily, keepWeekly, keepMonthly int) error {
-	_, err := r.run("forget", "--prune", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
+	output, err := r.run(r.timeout, "forget", "--prune", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
 
 	if err != nil {
-		return fmt.Errorf("failed to forget old backups: %w", err)
+		return fmt.Errorf("failed to forget old backups: %w %s", err, output)
 	}
 
 	return nil
@@ -184,7 +219,7 @@ func (s snapshotJson) toInternalSnapshot() Snapshot {
 }
 
 func (r Restic) ListSnapshots() ([]Snapshot, error) {
-	output, err := r.run("snapshots", "--no-lock", "--json")
+	output, err := r.run(queryTimeout, "snapshots", "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
@@ -205,7 +240,7 @@ func (r Restic) ListSnapshots() ([]Snapshot, error) {
 }
 
 func (r Restic) listSnapshotsByName(name string) ([]Snapshot, error) {
-	output, err := r.run("snapshots", "--tag", fmt.Sprintf("name=%s", name), "--no-lock", "--json")
+	output, err := r.run(queryTimeout, "snapshots", "--tag", fmt.Sprintf("name=%s", name), "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots by name: %w %s", err, output)
@@ -226,7 +261,7 @@ func (r Restic) listSnapshotsByName(name string) ([]Snapshot, error) {
 }
 
 func (r Restic) ListLatestSnapshots() ([]Snapshot, error) {
-	output, err := r.run("snapshots", "--latest=1", "--no-lock", "--json")
+	output, err := r.run(queryTimeout, "snapshots", "--latest=1", "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
@@ -257,7 +292,7 @@ type SnapshotStats struct {
 }
 
 func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
-	output, err := r.run("stats", "--json", "--mode", "raw-data", "--no-lock", "--tag", fmt.Sprintf("name=%s", name))
+	output, err := r.run(r.timeout, "stats", "--json", "--mode", "raw-data", "--no-lock", "--tag", fmt.Sprintf("name=%s", name))
 
 	if err != nil {
 		return SnapshotStats{}, fmt.Errorf("failed to get snapshot stats: %w %s", err, output)
@@ -273,7 +308,7 @@ func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
 }
 
 func (r Restic) Restore(snapshot, path string) error {
-	output, err := r.run("restore", snapshot, "--target", path, "--no-lock")
+	output, err := r.run(r.timeout, "restore", snapshot, "--target", path, "--no-lock")
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot: %s %w %s", snapshot, err, output)
 	}

@@ -42,6 +42,7 @@ restic:
   keep_daily: 7
   keep_weekly: 4
   keep_monthly: 3
+  timeout: 0 # Abort long-running restic commands, e.g. 6h. Default = 0 (no timeout)
 
 cron:
   metrics: "0 0 0 * * *" # Every day at 00:00
@@ -52,6 +53,7 @@ cron:
 
 s3:
   retries: 2 # Additional attempts. Default = 2
+  timeout: 0 # Abort a single upload attempt, e.g. 2h. Default = 0 (no timeout)
 
 backups:
   - path: /data/mongodb-dump
@@ -61,7 +63,18 @@ backups:
     exclude: ".DS_Store"
     exclude_file: "/config/exclude.txt"
     s3_retries: 1 # Overwrite the global retries if necessary
+    command_timeout: 0 # Kill pre/post commands, e.g. 30m. Default = 0 (no timeout)
 ```
+
+### Timeouts
+
+Timeouts are optional and disabled by default. Set them to make sure a hanging command can't block all later jobs, since jobs run one at a time. Values are durations with a unit (e.g. `30m`, `6h`). They can also be set via `RESTIC_TIMEOUT` and `S3_TIMEOUT`.
+
+- `restic.timeout` applies to `backup`, `restore`, `check`, `forget --prune` and `stats`. On timeout restic receives SIGINT so it can release its repository lock, and is killed after one minute if it hasn't exited.
+- `s3.timeout` applies to each upload attempt. A timed-out attempt counts as a failure, so `s3.retries` applies.
+- `backups[].command_timeout` applies to `pre_command` and `post_command`. On timeout the whole process group is killed.
+
+Short metadata calls always use a fixed timeout: 5 minutes for `restic snapshots` and `restic init`, 1 minute for S3 bucket checks and listings.
 
 docker-compose.yml
 
