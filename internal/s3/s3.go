@@ -106,8 +106,8 @@ func (s3 S3) ListObjects() ([]S3Object, error) {
 	return objects, nil
 }
 
-func (s3 S3) StreamUploadFile(filename string, reader *io.PipeReader) error {
-	ctx, cancel := utils.ContextWithOptionalTimeout(s3.timeout)
+func (s3 S3) StreamUploadFile(ctx context.Context, filename string, reader *io.PipeReader) error {
+	ctx, cancel := utils.ContextWithOptionalTimeout(ctx, s3.timeout)
 	defer cancel()
 
 	_, err := s3.client.PutObject(ctx, s3.bucket, filename, reader, -1, minio.PutObjectOptions{

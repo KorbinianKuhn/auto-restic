@@ -83,6 +83,7 @@ services:
   auto-restic:
     image: ghcr.io/korbiniankuhn/auto-restic:1.0.0
     container_name: auto-restic
+    stop_grace_period: 2m # let running restic commands release their lock on shutdown
     ports:
       - 127.0.0.1:2112:2112
     volumes:

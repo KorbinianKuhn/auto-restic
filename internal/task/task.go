@@ -2,6 +2,7 @@ package task
 
 import (
 	"archive/tar"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,9 +20,9 @@ import (
 	"github.com/korbiniankuhn/auto-restic/internal/utils"
 )
 
-func ResticCheck(m *metrics.Metrics, r restic.Restic) {
+func ResticCheck(ctx context.Context, m *metrics.Metrics, r restic.Restic) {
 	slog.Info("run restic check")
-	err := r.Check()
+	err := r.Check(ctx)
 	if err != nil {
 		m.AddSchedulerError(metrics.SchedulerErrorResticCheck)
 		slog.Error("failed to check restic repository", "error", err)
@@ -30,9 +31,9 @@ func ResticCheck(m *metrics.Metrics, r restic.Restic) {
 	}
 }
 
-func ForgetAndPrune(c config.Config, m *metrics.Metrics, r restic.Restic) {
+func ForgetAndPrune(ctx context.Context, c config.Config, m *metrics.Metrics, r restic.Restic) {
 	slog.Info("run restic forget and prune")
-	err := r.ForgetAndPrune(c.Restic.KeepDaily, c.Restic.KeepWeekly, c.Restic.KeepMonthly)
+	err := r.ForgetAndPrune(ctx, c.Restic.KeepDaily, c.Restic.KeepWeekly, c.Restic.KeepMonthly)
 	if err != nil {
 		m.AddSchedulerError(metrics.SchedulerErrorResticForgetAndPrune)
 		slog.Error("failed to forget and prune restic repository", "error", err)
@@ -46,12 +47,16 @@ func ForgetAndPrune(c config.Config, m *metrics.Metrics, r restic.Restic) {
 	}
 }
 
-func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
+func Backup(ctx context.Context, c config.Config, m *metrics.Metrics, r restic.Restic) {
 	slog.Info("starting restic backups")
 	for _, backup := range c.Backups {
+		if ctx.Err() != nil {
+			slog.Warn("restic backups aborted", "error", ctx.Err())
+			break
+		}
 		startedAt := time.Now()
-		err := runBackup(backup, func() error {
-			return r.BackupDirectory(backup.Name, backup.Path, backup.Exclude, backup.ExcludeFile)
+		err := runBackup(ctx, backup, func() error {
+			return r.BackupDirectory(ctx, backup.Name, backup.Path, backup.Exclude, backup.ExcludeFile)
 		})
 		if err != nil {
 			m.AddResticErrorByBackupName(backup.Name)
@@ -74,10 +79,10 @@ func Backup(c config.Config, m *metrics.Metrics, r restic.Restic) {
 // runBackup runs pre_command, the restic backup and post_command. Once
 // pre_command succeeded, post_command always runs, even if the backup failed,
 // so pairs like "stop service"/"start service" never leave a service stopped.
-func runBackup(backup config.BackupConfig, backupFn func() error) (err error) {
+func runBackup(ctx context.Context, backup config.BackupConfig, backupFn func() error) (err error) {
 	if backup.PreCommand != "" {
 		slog.Info("run pre backup command", "command", backup.PreCommand)
-		if err := utils.RunShellCommand(backup.PreCommand, backup.CommandTimeout); err != nil {
+		if err := utils.RunShellCommand(ctx, backup.PreCommand, backup.CommandTimeout); err != nil {
 			return fmt.Errorf("failed to run pre backup command %q: %w", backup.PreCommand, err)
 		}
 	}
@@ -85,7 +90,9 @@ func runBackup(backup config.BackupConfig, backupFn func() error) (err error) {
 	if backup.PostCommand != "" {
 		defer func() {
 			slog.Info("run post backup command", "command", backup.PostCommand)
-			if postErr := utils.RunShellCommand(backup.PostCommand, backup.CommandTimeout); postErr != nil {
+			// Run even during shutdown, e.g. to restart a stopped service
+			postCtx := context.WithoutCancel(ctx)
+			if postErr := utils.RunShellCommand(postCtx, backup.PostCommand, backup.CommandTimeout); postErr != nil {
 				err = errors.Join(err, fmt.Errorf("failed to run post backup command %q: %w", backup.PostCommand, postErr))
 			}
 		}()
@@ -142,7 +149,7 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 	return nil
 }
 
-func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Snapshot, passphrase string, retries int) error {
+func createAndUploadEncryptedDump(ctx context.Context, r restic.Restic, s3 *s3.S3, snapshot restic.Snapshot, passphrase string, retries int) error {
 	// Create temporary directory to restore snapshot
 	tmpDir, err := os.MkdirTemp("", "restic-dump")
 	if err != nil {
@@ -152,7 +159,7 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 
 	// Restore snapshot to temporary directory
 	slog.Info("restore snapshot to temporary directory", "snapshot", snapshot.Name)
-	if err := r.Restore(snapshot.ID, tmpDir); err != nil {
+	if err := r.Restore(ctx, snapshot.ID, tmpDir); err != nil {
 		return fmt.Errorf("failed to restore snapshot: %w", err)
 	}
 
@@ -175,7 +182,7 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 		}()
 
 		// Stream directly to S3
-		uploadErr := s3.StreamUploadFile(snapshot.Name+".tar.gz.age", pr)
+		uploadErr := s3.StreamUploadFile(ctx, snapshot.Name+".tar.gz.age", pr)
 
 		// The uploader may return early (e.g. network error) without draining
 		// the pipe. Closing the reader unblocks the archive writer, otherwise
@@ -189,11 +196,14 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 			return nil
 		}
 
-		if attempt < maxRetries {
+		if attempt < maxRetries && ctx.Err() == nil {
 			backoffTime := utils.BackoffTime(attempt)
 			slog.Warn("upload or archive creation failed, retrying", "attempt", attempt,
 				"backoff_time", backoffTime, "upload_error", uploadErr, "archive_error", archiveErr)
-			time.Sleep(backoffTime)
+			select {
+			case <-time.After(backoffTime):
+			case <-ctx.Done():
+			}
 			continue
 		}
 
@@ -242,7 +252,7 @@ func writeEncryptedArchive(w io.Writer, dir, passphrase string) error {
 	return err
 }
 
-func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
+func S3Backup(ctx context.Context, c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 	slog.Info("creating s3 backups")
 
 	snapshots, err := r.ListLatestSnapshots()
@@ -253,6 +263,10 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 	}
 
 	for _, backup := range c.Backups {
+		if ctx.Err() != nil {
+			slog.Warn("s3 backups aborted", "error", ctx.Err())
+			break
+		}
 		startedAt := time.Now()
 
 		snapshot := restic.Snapshot{}
@@ -274,7 +288,7 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 			retries = *backup.S3Retries
 		}
 
-		err = createAndUploadEncryptedDump(r, s3, snapshot, c.S3.Passphrase, retries)
+		err = createAndUploadEncryptedDump(ctx, r, s3, snapshot, c.S3.Passphrase, retries)
 
 		if err != nil {
 			m.AddS3ErrorByBackupName(backup.Name)

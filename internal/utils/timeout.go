@@ -22,13 +22,13 @@ func (e *TimeoutError) Unwrap() error {
 	return e.Err
 }
 
-// ContextWithOptionalTimeout returns a context that expires after timeout, or
-// a context without deadline if timeout is 0
-func ContextWithOptionalTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
+// ContextWithOptionalTimeout returns a child of parent that expires after
+// timeout, or a child without deadline if timeout is 0
+func ContextWithOptionalTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout > 0 {
-		return context.WithTimeout(context.Background(), timeout)
+		return context.WithTimeout(parent, timeout)
 	}
-	return context.WithCancel(context.Background())
+	return context.WithCancel(parent)
 }
 
 // WrapTimeout wraps err in a TimeoutError if ctx exceeded its deadline
