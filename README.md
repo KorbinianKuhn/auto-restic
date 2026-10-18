@@ -71,8 +71,8 @@ backups:
 
 Timeouts are optional and disabled by default. Set them to make sure a hanging command can't block all later jobs, since jobs run one at a time. Values are durations with a unit (e.g. `30m`, `6h`). They can also be set via `RESTIC_TIMEOUT` and `S3_TIMEOUT`.
 
-- `restic.timeout` applies to `backup`, `restore`, `check`, `forget --prune` and `stats`. On timeout restic receives SIGINT so it can release its repository lock, and is killed after one minute if it hasn't exited.
-- `s3.timeout` applies to each upload attempt. A timed-out attempt counts as a failure, so `s3.retries` applies.
+- `restic.timeout` applies to `backup`, `restore`, `dump`, `check`, `forget --prune` and `stats`. On timeout restic receives SIGINT so it can release its repository lock, and is killed after one minute if it hasn't exited.
+- `s3.timeout` applies to each upload attempt. A timed-out attempt counts as a failure, so `s3.retries` applies. The archive is streamed from `restic dump` while uploading, so an attempt is limited by both `s3.timeout` and `restic.timeout`.
 - `backups[].command_timeout` applies to `pre_command` and `post_command`. On timeout the whole process group is killed.
 
 Short metadata calls always use a fixed timeout: 5 minutes for `restic snapshots` and `restic init`, 1 minute for S3 bucket checks and listings.
@@ -93,7 +93,6 @@ services:
       - ./restic:/repository
       - ./restore:/restore
       - /var/run/docker.sock:/var/run/docker.sock # only required if you run docker commands for pre-post backup scripts
-      - ./restic-tmp:/tmp # Eventually ount tmp directory to a larger disk, as S3 snapshot create a temporary archive
 ```
 
 ## CLI
