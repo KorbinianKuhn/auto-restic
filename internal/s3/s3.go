@@ -74,6 +74,7 @@ type S3Object struct {
 	IsLatest       bool
 	VersionID      string
 	Key            string
+	IsDeleteMarker bool
 }
 
 func (s3 S3) ListObjects() ([]S3Object, error) {
@@ -98,6 +99,7 @@ func (s3 S3) ListObjects() ([]S3Object, error) {
 			IsLatest:       obj.IsLatest,
 			VersionID:      obj.VersionID,
 			Key:            obj.Key,
+			IsDeleteMarker: obj.IsDeleteMarker,
 		})
 	}
 

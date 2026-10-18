@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"filippo.io/age"
@@ -283,45 +284,58 @@ func S3Backup(c config.Config, m *metrics.Metrics, r restic.Restic, s3 *s3.S3) {
 }
 
 func updateS3Metrics(c config.Config, m *metrics.Metrics, s *s3.S3) error {
-	count := map[string]int{}
-	totalSize := map[string]int64{}
-	latestSize := map[string]int64{}
-	latestTime := map[string]float64{}
-
-	for _, backup := range c.Backups {
-		count[backup.Name] = 0
-		totalSize[backup.Name] = 0
-		latestSize[backup.Name] = 0
-		latestTime[backup.Name] = 0
-	}
-
 	objects, err := s.ListObjects()
 	if err != nil {
 		m.AddSchedulerError(metrics.SchedulerErrorS3ListObjects)
 		return fmt.Errorf("failed to list s3 objects: %w", err)
 	}
 
-	for _, object := range objects {
-		count[object.BackupName] = 0
-		totalSize[object.BackupName] = 0
-		latestSize[object.BackupName] = 0
-		latestTime[object.BackupName] = 0
+	backupNames := make([]string, 0, len(c.Backups))
+	for _, backup := range c.Backups {
+		backupNames = append(backupNames, backup.Name)
 	}
 
-	for _, object := range objects {
-		count[object.BackupName]++
-		totalSize[object.BackupName] += object.Size
-		if object.IsLatest {
-			latestSize[object.BackupName] = object.Size
-			latestTime[object.BackupName] = float64(object.CreatedAt.Unix())
-		}
-	}
-
-	for name, c := range count {
-		m.SetS3StatsByBackupName(name, c, totalSize[name], latestSize[name], latestTime[name])
+	for name, stats := range aggregateS3Stats(objects, backupNames) {
+		m.SetS3StatsByBackupName(name, stats.count, stats.totalSize, stats.latestSize, stats.latestTime)
 	}
 
 	return nil
+}
+
+type s3Stats struct {
+	count      int
+	totalSize  int64
+	latestSize int64
+	latestTime float64
+}
+
+// aggregateS3Stats returns the stats for every configured backup name. Delete
+// markers, keys that are no backup archive and unconfigured backup names are
+// ignored, so the reported label set stays stable.
+func aggregateS3Stats(objects []s3.S3Object, backupNames []string) map[string]s3Stats {
+	stats := make(map[string]s3Stats, len(backupNames))
+	for _, name := range backupNames {
+		stats[name] = s3Stats{}
+	}
+
+	for _, object := range objects {
+		if object.IsDeleteMarker || !strings.HasSuffix(object.Key, ".tar.gz.age") {
+			continue
+		}
+		s, ok := stats[object.BackupName]
+		if !ok {
+			continue
+		}
+		s.count++
+		s.totalSize += object.Size
+		if object.IsLatest {
+			s.latestSize = object.Size
+			s.latestTime = float64(object.CreatedAt.Unix())
+		}
+		stats[object.BackupName] = s
+	}
+
+	return stats
 }
 
 func UpdateAllMetrics(c config.Config, m *metrics.Metrics, r restic.Restic, s *s3.S3) {
