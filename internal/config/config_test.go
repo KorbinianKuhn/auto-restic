@@ -75,3 +75,25 @@ func TestInvalidTimeouts(t *testing.T) {
 		})
 	}
 }
+
+func TestBackupS3Retries(t *testing.T) {
+	setup(t, `
+backups:
+  - name: data
+    path: /data
+    s3_retries: 5
+  - name: other
+    path: /other
+`)
+
+	c, err := Get()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Backups[0].S3Retries == nil || *c.Backups[0].S3Retries != 5 {
+		t.Errorf("expected s3_retries 5, got %v", c.Backups[0].S3Retries)
+	}
+	if c.Backups[1].S3Retries != nil {
+		t.Errorf("expected no s3_retries override, got %d", *c.Backups[1].S3Retries)
+	}
+}

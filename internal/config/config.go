@@ -86,7 +86,7 @@ type BackupConfig struct {
 	ExcludeFile string `mapstructure:"exclude_file"`
 	PreCommand  string `mapstructure:"pre_command"`
 	PostCommand string `mapstructure:"post_command"`
-	S3Retries   *int   `mapstructure:"retries"`
+	S3Retries   *int   `mapstructure:"s3_retries"`
 	// Timeout for pre_command and post_command
 	CommandTimeout time.Duration `mapstructure:"command_timeout"`
 }
