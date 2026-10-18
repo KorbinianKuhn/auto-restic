@@ -117,7 +117,7 @@ func main() {
 	resticRemoveCmd := &cobra.Command{
 		Use:   "rm",
 		Short: "Remove restic backups by name",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			backupName, _ := cmd.Flags().GetString("name")
 
