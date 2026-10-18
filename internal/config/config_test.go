@@ -1,6 +1,8 @@
 package config
 
 import (
+	"context"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -73,5 +75,32 @@ func TestInvalidTimeouts(t *testing.T) {
 				t.Fatalf("expected timeout validation error, got %v", err)
 			}
 		})
+	}
+}
+
+func TestConsoleLogLevel(t *testing.T) {
+	previous := slog.Default()
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+		slog.SetLogLoggerLevel(slog.LevelInfo)
+	})
+
+	// The server sets a default logger before loading the config
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
+	setup(t, "logging:\n  level: warn\n  format: console\n")
+	if _, err := Get(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx := context.Background()
+	if slog.Default().Enabled(ctx, slog.LevelInfo) {
+		t.Error("expected info logs to be disabled")
+	}
+	if !slog.Default().Enabled(ctx, slog.LevelWarn) {
+		t.Error("expected warn logs to be enabled")
+	}
+	if slog.Default().Handler() != builtinHandler {
+		t.Error("expected the built-in console handler")
 	}
 }

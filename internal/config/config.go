@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"strings"
@@ -19,6 +20,11 @@ const (
 	LogFormatJSON    LogFormat = "json"
 	LogFormatConsole LogFormat = "console"
 )
+
+// builtinHandler is slog's built-in handler that writes through the log
+// package, captured before anyone replaces the default logger. It is used for
+// the console format.
+var builtinHandler = slog.Default().Handler()
 
 func (f *LogFormat) UnmarshalText(text []byte) error {
 	switch format := string(text); format {
@@ -189,7 +195,13 @@ func Get() (Config, error) {
 			Level: config.Logging.SlogLevel,
 		})))
 	default:
+		// SetLogLoggerLevel only affects the built-in handler, so restore it
+		// in case another default was set before (e.g. by the server). Setting
+		// a different default also redirected the log package, undo that too.
+		log.SetOutput(os.Stderr)
+		log.SetFlags(log.LstdFlags)
 		slog.SetLogLoggerLevel(config.Logging.SlogLevel)
+		slog.SetDefault(slog.New(builtinHandler))
 	}
 
 	if config.Restic.Password == "" {
