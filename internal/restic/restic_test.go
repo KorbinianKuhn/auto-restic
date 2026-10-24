@@ -3,6 +3,7 @@ package restic
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -82,5 +83,71 @@ func TestErrorIncludesOutput(t *testing.T) {
 	var timeoutErr *utils.TimeoutError
 	if errors.As(err, &timeoutErr) {
 		t.Fatalf("expected no timeout error, got %v", err)
+	}
+}
+
+func TestLatestByNamePicksNewestSnapshot(t *testing.T) {
+	now := time.Now()
+	snapshots := []snapshotJson{
+		{ID: "old-host", Time: now.Add(-48 * time.Hour), Tags: []string{"name=data"}},
+		{ID: "other", Time: now.Add(-24 * time.Hour), Tags: []string{"name=other"}},
+		{ID: "new-host", Time: now, Tags: []string{"name=data"}},
+	}
+
+	latest := latestByName(snapshots)
+
+	if len(latest) != 2 {
+		t.Fatalf("expected one snapshot per name, got %d", len(latest))
+	}
+	if latest[0].Name != "data" || latest[0].ID != "new-host" {
+		t.Fatalf("expected newest snapshot for data, got %s/%s", latest[0].Name, latest[0].ID)
+	}
+	if latest[1].Name != "other" || latest[1].ID != "other" {
+		t.Fatalf("expected snapshot for other, got %s/%s", latest[1].Name, latest[1].ID)
+	}
+}
+
+// TestRetentionIgnoresHostname simulates snapshots of a recreated container
+// which had a different hostname before
+func TestRetentionIgnoresHostname(t *testing.T) {
+	if _, err := exec.LookPath("restic"); err != nil {
+		t.Skip("restic not installed")
+	}
+
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "file"), []byte("data"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	r, err := NewRestic(t.TempDir(), "password")
+	if err != nil {
+		t.Fatalf("failed to create restic: %v", err)
+	}
+
+	if output, err := r.run(queryTimeout, "backup", src, "--host", "3f2a1b0c9d8e", "--tag", "name=data"); err != nil {
+		t.Fatalf("failed to create old snapshot: %v %s", err, output)
+	}
+	if err := r.BackupDirectory("data", src, "", ""); err != nil {
+		t.Fatalf("failed to backup: %v", err)
+	}
+
+	latest, err := r.ListLatestSnapshots()
+	if err != nil {
+		t.Fatalf("failed to list latest snapshots: %v", err)
+	}
+	if len(latest) != 1 || latest[0].Hostname != hostname {
+		t.Fatalf("expected the newest snapshot only, got %+v", latest)
+	}
+
+	if err := r.ForgetAndPrune(1, 0, 0); err != nil {
+		t.Fatalf("failed to forget and prune: %v", err)
+	}
+
+	snapshots, err := r.ListSnapshots()
+	if err != nil {
+		t.Fatalf("failed to list snapshots: %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0].Hostname != hostname {
+		t.Fatalf("expected one snapshot with hostname %s after prune, got %+v", hostname, snapshots)
 	}
 }
