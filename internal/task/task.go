@@ -1,12 +1,10 @@
 package task
 
 import (
-	"archive/tar"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -153,20 +151,13 @@ func updateResticMetrics(c config.Config, m *metrics.Metrics, r restic.Restic) e
 }
 
 func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Snapshot, passphrase string, retries int) error {
-	// Create temporary directory to restore snapshot
-	tmpDir, err := os.MkdirTemp("", "restic-dump")
+	recipient, err := age.NewScryptRecipient(passphrase)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// Restore snapshot to temporary directory
-	slog.Info("restore snapshot to temporary directory", "snapshot", snapshot.Name)
-	if err := r.Restore(snapshot.ID, tmpDir); err != nil {
-		return fmt.Errorf("failed to restore snapshot: %w", err)
+		return fmt.Errorf("failed to create age recipient: %w", err)
 	}
 
-	// Stream tar.gz.age to S3 with retry
+	// Stream restic dump as tar.gz.age to S3 with retry, without a temporary
+	// copy of the snapshot on disk
 	slog.Info("create encrypted archive and upload to s3", "snapshot", snapshot.Name)
 
 	// Always make at least one attempt, a negative value must not skip the upload
@@ -177,7 +168,9 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 		errCh := make(chan error, 1)
 
 		go func() {
-			err := writeEncryptedArchive(pw, tmpDir, passphrase)
+			err := writeEncryptedArchive(pw, recipient, func(w io.Writer) error {
+				return r.Dump(snapshot.ID, w)
+			})
 			// Propagate archive errors to the uploader so a broken archive is
 			// never completed as a valid object
 			pw.CloseWithError(err)
@@ -218,13 +211,9 @@ func createAndUploadEncryptedDump(r restic.Restic, s3 *s3.S3, snapshot restic.Sn
 	return nil
 }
 
-func writeEncryptedArchive(w io.Writer, dir, passphrase string) error {
-	// Create age recipient
-	recipient, err := age.NewScryptRecipient(passphrase)
-	if err != nil {
-		return fmt.Errorf("failed to create age recipient: %w", err)
-	}
-
+// writeEncryptedArchive gzips and encrypts the tar archive that writeTar
+// writes and writes the result to w
+func writeEncryptedArchive(w io.Writer, recipient age.Recipient, writeTar func(io.Writer) error) error {
 	// Wrap writer in age encryptor
 	ageWriter, err := age.Encrypt(w, recipient)
 	if err != nil {
@@ -234,14 +223,9 @@ func writeEncryptedArchive(w io.Writer, dir, passphrase string) error {
 	// Wrap age in gzip
 	gzipWriter := pgzip.NewWriter(ageWriter)
 
-	// Wrap gzip in tar
-	tarWriter := tar.NewWriter(gzipWriter)
-	err = utils.WriteDirectoryToTar(tarWriter, dir)
+	err = writeTar(gzipWriter)
 
 	// Close all writers in correct order
-	if cerr := tarWriter.Close(); cerr != nil && err == nil {
-		err = fmt.Errorf("failed to close tar writer: %w", cerr)
-	}
 	if cerr := gzipWriter.Close(); cerr != nil && err == nil {
 		err = fmt.Errorf("failed to close gzip writer: %w", cerr)
 	}

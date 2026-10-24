@@ -3,6 +3,7 @@ package restic
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -19,6 +20,10 @@ const queryTimeout = 5 * time.Minute
 // interruptGracePeriod is how long restic may take to release its repository
 // lock after SIGINT before it gets killed
 const interruptGracePeriod = time.Minute
+
+// maxStderrSize bounds the stderr output kept for error messages of
+// streaming commands
+const maxStderrSize = 64 * 1024
 
 type Restic struct {
 	repository string
@@ -334,4 +339,48 @@ func (r Restic) Restore(snapshot, path string) error {
 	}
 
 	return nil
+}
+
+// Dump streams the snapshot as tar archive to w. Paths are relative to "/",
+// the same layout as a restore of the snapshot. It takes the shared repository
+// lock. On timeout restic receives SIGINT so it can release its lock, and is
+// killed if it does not exit in time. If writing to w fails, restic is stopped
+// and the write error is returned.
+func (r Restic) Dump(snapshot string, w io.Writer) error {
+	ctx, cancel := utils.ContextWithOptionalTimeout(r.timeout)
+	defer cancel()
+
+	stderr := &limitedBuffer{limit: maxStderrSize}
+	cmd := exec.CommandContext(ctx, "restic", "dump", snapshot, "/", "--archive", "tar")
+	cmd.Env = r.getCommandEnv()
+	cmd.Stdout = w
+	cmd.Stderr = stderr
+	cmd.Cancel = func() error {
+		return cmd.Process.Signal(os.Interrupt)
+	}
+	cmd.WaitDelay = interruptGracePeriod
+
+	err := utils.WrapTimeout(ctx, "restic dump", r.timeout, cmd.Run())
+	if err != nil {
+		return fmt.Errorf("failed to dump snapshot %s: %w %s", snapshot, err, stderr)
+	}
+	return nil
+}
+
+// limitedBuffer keeps the first limit bytes written to it and discards the
+// rest, so a chatty command can't grow memory without bound
+type limitedBuffer struct {
+	buf   []byte
+	limit int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if remaining := b.limit - len(b.buf); remaining > 0 {
+		b.buf = append(b.buf, p[:min(len(p), remaining)]...)
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	return string(b.buf)
 }
