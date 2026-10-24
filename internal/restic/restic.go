@@ -100,8 +100,12 @@ func (r Restic) init() error {
 	return nil
 }
 
+// hostname is set on every snapshot, otherwise restic uses the hostname of the
+// container which changes whenever the container is recreated
+const hostname = "auto-restic"
+
 func (r Restic) BackupDirectory(name, path, exclude, excludeFile string) error {
-	args := []string{"backup", path, "--tag", fmt.Sprintf("name=%s", name), "--json"}
+	args := []string{"backup", path, "--host", hostname, "--tag", fmt.Sprintf("name=%s", name), "--json"}
 	if exclude != "" {
 		args = append(args, "--exclude", exclude)
 	}
@@ -155,8 +159,11 @@ func (r Restic) Check() error {
 	return nil
 }
 
+// ForgetAndPrune applies the retention policy per backup name. Grouping by tags
+// instead of the default host and paths also covers snapshots that were created
+// with a different hostname
 func (r Restic) ForgetAndPrune(keepDaily, keepWeekly, keepMonthly int) error {
-	output, err := r.run(r.timeout, "forget", "--prune", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
+	output, err := r.run(r.timeout, "forget", "--prune", "--group-by", "tags", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
 
 	if err != nil {
 		return fmt.Errorf("failed to forget old backups: %w %s", err, output)
@@ -273,12 +280,25 @@ func (r Restic) ListLatestSnapshots() ([]Snapshot, error) {
 		return nil, fmt.Errorf("failed to unmarshal snapshots: %w", err)
 	}
 
-	snapshotList := make([]Snapshot, len(snapshots))
-	for i, snapshot := range snapshots {
-		snapshotList[i] = snapshot.toInternalSnapshot()
-	}
+	return latestByName(snapshots), nil
+}
 
-	return snapshotList, nil
+// latestByName returns the newest snapshot per backup name. restic --latest
+// works per host and paths, so it returns one snapshot per hostname
+func latestByName(snapshots []snapshotJson) []Snapshot {
+	latest := []Snapshot{}
+	index := map[string]int{}
+	for _, s := range snapshots {
+		snapshot := s.toInternalSnapshot()
+		i, ok := index[snapshot.Name]
+		if !ok {
+			index[snapshot.Name] = len(latest)
+			latest = append(latest, snapshot)
+		} else if snapshot.Time.After(latest[i].Time) {
+			latest[i] = snapshot
+		}
+	}
+	return latest
 }
 
 type SnapshotStats struct {
