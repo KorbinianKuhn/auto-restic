@@ -81,6 +81,12 @@ type S3Config struct {
 	Secure     bool          `mapstructure:"secure"`
 }
 
+type APIConfig struct {
+	// Address the API listens on, e.g. ":2113". Empty disables the API.
+	Listen string `mapstructure:"listen"`
+	Token  string `mapstructure:"token"`
+}
+
 type BackupConfig struct {
 	Name        string `mapstructure:"name"`
 	Path        string `mapstructure:"path"`
@@ -118,12 +124,16 @@ func validateRetries(name string, retries int) error {
 	return nil
 }
 
+// minAPITokenLength rejects tokens that are easy to guess
+const minAPITokenLength = 16
+
 type Config struct {
 	Logging        LoggingConfig  `mapstructure:"logging"`
 	Restic         ResticConfig   `mapstructure:"restic"`
 	Cron           CronConfig     `mapstructure:"cron"`
 	S3             S3Config       `mapstructure:"s3"`
 	MetricsEnabled bool           `mapstructure:"metrics_enabled"`
+	API            APIConfig      `mapstructure:"api"`
 	Backups        []BackupConfig `mapstructure:"backups"`
 }
 
@@ -163,6 +173,8 @@ func Get() (Config, error) {
 	_ = v.BindEnv("s3.retries")
 	_ = v.BindEnv("s3.timeout")
 	_ = v.BindEnv("s3.secure")
+	_ = v.BindEnv("api.listen")
+	_ = v.BindEnv("api.token")
 
 	// Default values
 	v.SetDefault("logging.level", "info")
@@ -243,6 +255,10 @@ func Get() (Config, error) {
 
 	if err := validateRetries("s3.retries", config.S3.Retries); err != nil {
 		return config, err
+	}
+
+	if config.API.Listen != "" && len(config.API.Token) < minAPITokenLength {
+		return config, fmt.Errorf("API_TOKEN must be at least %d characters when api.listen is set", minAPITokenLength)
 	}
 
 	// Validate backup configurations

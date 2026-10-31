@@ -10,7 +10,9 @@ import (
 	"text/tabwriter"
 
 	"filippo.io/age"
+	"github.com/joho/godotenv"
 	"github.com/klauspost/pgzip"
+	"github.com/korbiniankuhn/auto-restic/internal/api"
 	"github.com/korbiniankuhn/auto-restic/internal/config"
 	"github.com/korbiniankuhn/auto-restic/internal/restic"
 	"github.com/korbiniankuhn/auto-restic/internal/s3"
@@ -294,7 +296,45 @@ func main() {
 	s3RestoreCmd.MarkFlagRequired("mount-path")
 	s3Cmd.AddCommand(s3RestoreCmd)
 
-	rootCmd.AddCommand(resticCmd, s3Cmd)
+	runCmd := &cobra.Command{
+		Use:       "run <" + strings.Join(api.Jobs, "|") + ">",
+		Short:     "Trigger a job on a running server",
+		Long:      "Queue a job on a running auto-restic server. The server runs it like a scheduled job (one job at a time) and records the metrics. The command returns once the job is queued; follow the server logs or metrics for the result.",
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		ValidArgs: api.Jobs,
+		// Only needs the server url and token, not the full config with
+		// restic and S3 credentials, so it can run on another machine
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			godotenv.Load()
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			serverURL, _ := cmd.Flags().GetString("server")
+			token, _ := cmd.Flags().GetString("token")
+			if serverURL == "" {
+				serverURL = os.Getenv("API_URL")
+			}
+			if serverURL == "" {
+				serverURL = "http://localhost:2113"
+			}
+			if token == "" {
+				token = os.Getenv("API_TOKEN")
+			}
+			if token == "" {
+				return fmt.Errorf("API_TOKEN is required")
+			}
+
+			if err := api.Trigger(serverURL, token, args[0]); err != nil {
+				return fmt.Errorf("failed to trigger %s: %w", args[0], err)
+			}
+			println("Queued job:", args[0])
+			return nil
+		},
+	}
+	runCmd.Flags().String("server", "", "URL of the auto-restic api (default $API_URL or http://localhost:2113)")
+	runCmd.Flags().String("token", "", "API token (default $API_TOKEN)")
+
+	rootCmd.AddCommand(resticCmd, s3Cmd, runCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println("command execution failed:", err)

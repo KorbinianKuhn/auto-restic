@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/korbiniankuhn/auto-restic/internal/api"
 	"github.com/korbiniankuhn/auto-restic/internal/config"
 	"github.com/korbiniankuhn/auto-restic/internal/metrics"
 	"github.com/korbiniankuhn/auto-restic/internal/restic"
@@ -71,7 +72,7 @@ func main() {
 	panicOnError("failed to create scheduler", err)
 
 	// Pre backup scripts and restic snapshot creation
-	_, err = scheduler.NewJob(
+	backupJob, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.Backup, true),
 		gocron.NewTask(func() {
 			task.Backup(c, m, r)
@@ -80,7 +81,7 @@ func main() {
 	panicOnError("failed to schedule backup job", err)
 
 	// restic check
-	_, err = scheduler.NewJob(
+	checkJob, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.Check, true),
 		gocron.NewTask(func() {
 			task.ResticCheck(m, r)
@@ -89,7 +90,7 @@ func main() {
 	panicOnError("failed to schedule check job", err)
 
 	// restic forget and prune
-	_, err = scheduler.NewJob(
+	pruneJob, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.Prune, true),
 		gocron.NewTask(func() {
 			task.ForgetAndPrune(c, m, r)
@@ -98,7 +99,7 @@ func main() {
 	panicOnError("failed to schedule prune job", err)
 
 	// S3 backup
-	_, err = scheduler.NewJob(
+	s3Job, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.S3, true),
 		gocron.NewTask(func() {
 			task.S3Backup(c, m, r, s)
@@ -134,12 +135,45 @@ func main() {
 	}()
 	slog.Info("http server started", "port", "2112")
 
+	// API to trigger jobs, on its own listener so it isn't exposed wherever
+	// the metrics endpoint is
+	var apiServer *http.Server
+	if c.API.Listen != "" {
+		apiServer = &http.Server{
+			Addr: c.API.Listen,
+			Handler: api.NewHandler(c.API.Token, map[string]api.Runner{
+				"backup": backupJob,
+				"s3":     s3Job,
+				"check":  checkJob,
+				"prune":  pruneJob,
+			}),
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				panicOnError("failed to start api server", err)
+			}
+		}()
+		slog.Info("api server started", "listen", c.API.Listen)
+	}
+
 	// Wait for termination signal
 	osSignal := make(chan os.Signal, 1)
 	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
 
 	<-osSignal
 	slog.Info("received termination signal, shutting down")
+
+	// Stop api server first so no new jobs are queued
+	if apiServer != nil {
+		apiCtx, apiCancel := context.WithTimeout(context.TODO(), 5*time.Second)
+		defer apiCancel()
+		if err := apiServer.Shutdown(apiCtx); err != nil {
+			panicOnError("failed to shutdown api server", err)
+		}
+	}
 
 	// Stop scheduler
 	scheduler.Shutdown()

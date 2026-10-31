@@ -30,6 +30,8 @@ S3_BUCKET=
 S3_PASSPHRASE=
 ```
 
+Optional: `API_TOKEN=` (at least 16 characters, e.g. `openssl rand -hex 32`) to trigger jobs remotely, see [Trigger jobs](#trigger-jobs).
+
 config.yml (all variables are shown with defaults and are optional)
 
 ```yaml
@@ -55,6 +57,9 @@ s3:
   secure: true # Use HTTPS, set to false for a plain-HTTP endpoint (e.g. a local MinIO). Default = true
   retries: 2 # Additional attempts. Default = 2
   timeout: 0 # Abort a single upload attempt, e.g. 2h. Default = 0 (no timeout)
+
+api:
+  listen: "" # Address of the API to trigger jobs, e.g. ":2113". Requires API_TOKEN. Default = "" (disabled)
 
 backups:
   - path: /data/mongodb-dump
@@ -97,7 +102,7 @@ services:
 
 ## CLI
 
-A CLI is provided to list, remove, and restore backups (restic or S3) and to unlock the restic repository. The CLI uses the same config as the server (e.g. for access keys, secrets).
+A CLI is provided to list, remove, and restore backups (restic or S3), to unlock the restic repository and to trigger jobs on the server. The CLI uses the same config as the server (e.g. for access keys, secrets).
 
 Connect to a running container
 
@@ -120,8 +125,39 @@ docker compose run --entrypoint "/bin/sh" auto-restic
 | auto-restic s3 ls                                                      | List all S3 backups and versions            |
 | auto-restic s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
 | auto-restic s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
+| auto-restic run backup\|s3\|check\|prune [--server ""] [--token ""]     | Trigger a job on the server                 |
 
 If the container was killed while restic held a lock (e.g. during a backup), following runs fail with `repository is already locked`. `auto-restic restic unlock` removes locks that haven't been refreshed for 30 minutes. To remove them right away use `--remove-all`, but only while no backup is running.
+
+### Trigger jobs
+
+`auto-restic run <backup|s3|check|prune>` asks the running server to run a job now, e.g. before maintenance. The server queues it like a scheduled run: it waits for a running job to finish, and records the same logs and metrics. The command returns once the job is queued.
+
+The API is disabled by default. Enable it with `api.listen` (or `API_LISTEN`) and `API_TOKEN`:
+
+```yaml
+api:
+  listen: ":2113"
+```
+
+```yaml
+services:
+  auto-restic:
+    ports:
+      - 127.0.0.1:2113:2113
+```
+
+The CLI reads the server URL from `--server` or `API_URL` (default `http://localhost:2113`) and the token from `--token` or `API_TOKEN`. It only needs these two values, so it also works from another machine:
+
+```bash
+# inside the container
+docker exec auto-restic auto-restic run backup
+
+# from another machine
+API_URL=https://backup.example.com API_TOKEN=... auto-restic run s3
+```
+
+The API serves plain HTTP. To reach it over the network, put it behind a reverse proxy with TLS or use an SSH tunnel instead of exposing the port directly.
 
 ### S3 (Disaster Recovery)
 
