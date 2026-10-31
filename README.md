@@ -71,8 +71,8 @@ backups:
 
 Timeouts are optional and disabled by default. Set them to make sure a hanging command can't block all later jobs, since jobs run one at a time. Values are durations with a unit (e.g. `30m`, `6h`). They can also be set via `RESTIC_TIMEOUT` and `S3_TIMEOUT`.
 
-- `restic.timeout` applies to `backup`, `restore`, `check`, `forget --prune` and `stats`. On timeout restic receives SIGINT so it can release its repository lock, and is killed after one minute if it hasn't exited.
-- `s3.timeout` applies to each upload attempt. A timed-out attempt counts as a failure, so `s3.retries` applies.
+- `restic.timeout` applies to `backup`, `restore`, `dump`, `check`, `forget --prune` and `stats`. On timeout restic receives SIGINT so it can release its repository lock, and is killed after one minute if it hasn't exited.
+- `s3.timeout` applies to each upload attempt. A timed-out attempt counts as a failure, so `s3.retries` applies. The archive is streamed from `restic dump` while uploading, so an attempt is limited by both `s3.timeout` and `restic.timeout`.
 - `backups[].command_timeout` applies to `pre_command` and `post_command`. On timeout the whole process group is killed.
 
 Short metadata calls always use a fixed timeout: 5 minutes for `restic snapshots` and `restic init`, 1 minute for S3 bucket checks and listings.
@@ -93,12 +93,11 @@ services:
       - ./restic:/repository
       - ./restore:/restore
       - /var/run/docker.sock:/var/run/docker.sock # only required if you run docker commands for pre-post backup scripts
-      - ./restic-tmp:/tmp # Eventually ount tmp directory to a larger disk, as S3 snapshot create a temporary archive
 ```
 
 ## CLI
 
-A CLI is provided to list, remove, and restore backups (restic or S3). The CLI uses the same config as the server (e.g. for access keys, secrets).
+A CLI is provided to list, remove, and restore backups (restic or S3) and to unlock the restic repository. The CLI uses the same config as the server (e.g. for access keys, secrets).
 
 Connect to a running container
 
@@ -117,9 +116,12 @@ docker compose run --entrypoint "/bin/sh" auto-restic
 | auto-restic restic ls                                                  | List all local backups and snapshots        |
 | auto-restic restic rm --name ""                                        | Remove all snapshots of a backup            |
 | auto-restic restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
+| auto-restic restic unlock [--remove-all]                               | Remove stale (or all) repository locks      |
 | auto-restic s3 ls                                                      | List all S3 backups and versions            |
 | auto-restic s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
 | auto-restic s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
+
+If the container was killed while restic held a lock (e.g. during a backup), following runs fail with `repository is already locked`. `auto-restic restic unlock` removes locks that haven't been refreshed for 30 minutes. To remove them right away use `--remove-all`, but only while no backup is running.
 
 ### S3 (Disaster Recovery)
 

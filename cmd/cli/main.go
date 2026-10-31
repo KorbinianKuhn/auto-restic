@@ -159,6 +159,29 @@ func main() {
 	resticRestoreCmd.MarkFlagRequired("mount-path")
 	resticCmd.AddCommand(resticRestoreCmd)
 
+	resticUnlockCmd := &cobra.Command{
+		Use:   "unlock",
+		Short: "Remove stale restic repository locks",
+		Long: "Remove stale restic repository locks, e.g. after the container was killed during a backup. " +
+			"Locks are stale once they were not refreshed for 30 minutes. " +
+			"Use --remove-all to remove all locks immediately, but only if no other restic process (e.g. a running backup) uses the repository.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			removeAll, _ := cmd.Flags().GetBool("remove-all")
+			session := cmd.Context().Value(ctxKeySession).(*Session)
+
+			output, err := session.Restic.Unlock(removeAll)
+			if err != nil {
+				return fmt.Errorf("failed to unlock restic repository: %w", err)
+			}
+			print(output)
+			println("Unlocked restic repository")
+			return nil
+		},
+	}
+	resticUnlockCmd.Flags().Bool("remove-all", false, "Remove all locks, even those that are not stale")
+	resticCmd.AddCommand(resticUnlockCmd)
+
 	s3Cmd := &cobra.Command{
 		Use:   "s3",
 		Short: "Manage S3 backups",
