@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
-	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -15,22 +17,69 @@ import (
 // Jobs that can be triggered via the API, in the order shown to users
 var Jobs = []string{"backup", "s3", "check", "prune"}
 
+// SocketPath is where the server listens. A unix socket is only reachable
+// from within the container (e.g. via docker exec), so it needs no
+// authentication and no exposed port.
+var SocketPath = filepath.Join(os.TempDir(), "auto-restic.sock")
+
 // Runner queues a scheduled job for an immediate run. gocron.Job implements it.
 type Runner interface {
 	RunNow() error
 }
 
-// NewHandler serves POST /api/jobs/{job}/run. Requests must carry the token as
-// bearer token. Triggered jobs are queued in the scheduler, so they run one at
-// a time with the scheduled jobs and record the same metrics.
-func NewHandler(token string, runners map[string]Runner) http.Handler {
+// Server serves POST /api/jobs/{job}/run on a unix socket. Triggered jobs are
+// queued in the scheduler, so they run one at a time with the scheduled jobs
+// and record the same metrics.
+type Server struct {
+	http     *http.Server
+	listener net.Listener
+}
+
+func NewServer(socketPath string, runners map[string]Runner) (*Server, error) {
+	// A server that was killed leaves its socket behind
+	if conn, err := net.Dial("unix", socketPath); err == nil {
+		conn.Close()
+		return nil, fmt.Errorf("another server is listening on %s", socketPath)
+	}
+	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("failed to remove stale socket: %w", err)
+	}
+
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on %s: %w", socketPath, err)
+	}
+	// Only the user running the server may trigger jobs
+	if err := os.Chmod(socketPath, 0600); err != nil {
+		listener.Close()
+		return nil, fmt.Errorf("failed to restrict socket permissions: %w", err)
+	}
+
+	return &Server{
+		http: &http.Server{
+			Handler:           newHandler(runners),
+			ReadHeaderTimeout: 10 * time.Second,
+		},
+		listener: listener,
+	}, nil
+}
+
+// Serve blocks until Shutdown is called
+func (s *Server) Serve() error {
+	if err := s.http.Serve(s.listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+// Shutdown stops accepting jobs and removes the socket
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.http.Shutdown(ctx)
+}
+
+func newHandler(runners map[string]Runner) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/jobs/{job}/run", func(w http.ResponseWriter, r *http.Request) {
-		if !authorized(r, token) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
 		name := r.PathValue("job")
 		runner, ok := runners[name]
 		if !ok {
@@ -51,35 +100,31 @@ func NewHandler(token string, runners map[string]Runner) http.Handler {
 	return mux
 }
 
-func authorized(r *http.Request, token string) bool {
-	given, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	return ok && token != "" && subtle.ConstantTimeCompare([]byte(given), []byte(token)) == 1
-}
-
 // requestTimeout bounds a trigger request. The server only queues the job, so
 // it answers quickly even if another job is running.
 const requestTimeout = 30 * time.Second
 
-// Trigger asks the server at serverURL to queue job. It returns once the job is
-// queued, not when it finished.
-func Trigger(serverURL, token, job string) error {
+// Trigger asks the server listening on socketPath to queue job. It returns
+// once the job is queued, not when it finished.
+func Trigger(socketPath, job string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 
-	endpoint, err := url.JoinPath(serverURL, "api", "jobs", job, "run")
-	if err != nil {
-		return fmt.Errorf("invalid server url %q: %w", serverURL, err)
-	}
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+		},
+	}}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	// The host is ignored, the transport always dials the socket
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://auto-restic/api/jobs/"+job+"/run", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to reach server: %w", err)
+		return fmt.Errorf("failed to reach server on %s, is it running with api.enabled?: %w", socketPath, err)
 	}
 	defer resp.Body.Close()
 

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -36,10 +35,9 @@ func TestTriggerWaitsForRunningJob(t *testing.T) {
 	}
 	scheduler.Start()
 
-	server := httptest.NewServer(NewHandler("secret", map[string]Runner{"slow": slowJob, "backup": backupJob}))
-	defer server.Close()
+	socket := startServer(t, map[string]Runner{"slow": slowJob, "backup": backupJob})
 
-	if err := Trigger(server.URL, "secret", "slow"); err != nil {
+	if err := Trigger(socket, "slow"); err != nil {
 		t.Fatalf("failed to trigger slow job: %v", err)
 	}
 	if got := receive(t, started); got != "slow" {
@@ -47,7 +45,7 @@ func TestTriggerWaitsForRunningJob(t *testing.T) {
 	}
 
 	// Returns right away although the slow job blocks the scheduler
-	if err := Trigger(server.URL, "secret", "backup"); err != nil {
+	if err := Trigger(socket, "backup"); err != nil {
 		t.Fatalf("failed to trigger backup job: %v", err)
 	}
 	select {

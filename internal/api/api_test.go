@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -18,65 +21,102 @@ func (f *fakeRunner) RunNow() error {
 	return f.err
 }
 
+// startServer serves runners on a socket in a short temp dir, since unix
+// socket paths are limited to about 100 characters
+func startServer(t *testing.T, runners map[string]Runner) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "ar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "api.sock")
+
+	server, err := NewServer(socket, runners)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- server.Serve() }()
+	t.Cleanup(func() {
+		server.Shutdown(context.Background())
+		if err := <-done; err != nil {
+			t.Errorf("serve failed: %v", err)
+		}
+	})
+	return socket
+}
+
 func TestTrigger(t *testing.T) {
 	backup := &fakeRunner{}
 	failing := &fakeRunner{err: errors.New("queue full")}
-	server := httptest.NewServer(NewHandler("secret", map[string]Runner{
-		"backup": backup,
-		"prune":  failing,
-	}))
-	defer server.Close()
+	socket := startServer(t, map[string]Runner{"backup": backup, "prune": failing})
 
-	if err := Trigger(server.URL, "secret", "backup"); err != nil {
+	if err := Trigger(socket, "backup"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if backup.runs != 1 {
 		t.Fatalf("expected backup to be queued once, got %d", backup.runs)
 	}
 
-	for _, tc := range []struct {
-		name, token, job, want string
-	}{
-		{"wrong token", "wrong", "backup", "401"},
-		{"empty token", "", "backup", "401"},
-		{"unknown job", "secret", "unknown", "404"},
-		{"run fails", "secret", "prune", "queue full"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			err := Trigger(server.URL, tc.token, tc.job)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("expected error containing %q, got %v", tc.want, err)
-			}
-		})
+	if err := Trigger(socket, "unknown"); err == nil || !strings.Contains(err.Error(), "404") {
+		t.Fatalf("expected unknown job error, got %v", err)
 	}
-	if backup.runs != 1 {
-		t.Fatalf("expected rejected requests not to queue a job, got %d runs", backup.runs)
+	if err := Trigger(socket, "prune"); err == nil || !strings.Contains(err.Error(), "queue full") {
+		t.Fatalf("expected run error, got %v", err)
+	}
+}
+
+func TestSocketPermissions(t *testing.T) {
+	socket := startServer(t, nil)
+	info, err := os.Stat(socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Fatalf("expected socket mode 0600, got %o", perm)
+	}
+}
+
+func TestStaleSocketIsReplaced(t *testing.T) {
+	dir, err := os.MkdirTemp("", "ar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "api.sock")
+	if err := os.WriteFile(socket, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	server, err := NewServer(socket, nil)
+	if err != nil {
+		t.Fatalf("expected stale socket to be replaced, got %v", err)
+	}
+	server.listener.Close()
+}
+
+func TestSecondServerIsRejected(t *testing.T) {
+	socket := startServer(t, nil)
+	if _, err := NewServer(socket, nil); err == nil || !strings.Contains(err.Error(), "another server") {
+		t.Fatalf("expected running server to be detected, got %v", err)
+	}
+}
+
+func TestTriggerWithoutServer(t *testing.T) {
+	err := Trigger(filepath.Join(t.TempDir(), "missing.sock"), "backup")
+	if err == nil || !strings.Contains(err.Error(), "api.enabled") {
+		t.Fatalf("expected a hint to enable the api, got %v", err)
 	}
 }
 
 func TestOnlyPostIsAllowed(t *testing.T) {
 	backup := &fakeRunner{}
-	handler := NewHandler("secret", map[string]Runner{"backup": backup})
-
 	req := httptest.NewRequest(http.MethodGet, "/api/jobs/backup/run", nil)
-	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+	newHandler(map[string]Runner{"backup": backup}).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed || backup.runs != 0 {
 		t.Fatalf("expected 405 without a run, got %d and %d runs", rec.Code, backup.runs)
-	}
-}
-
-func TestEmptyServerTokenRejectsAll(t *testing.T) {
-	handler := NewHandler("", map[string]Runner{"backup": &fakeRunner{}})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/jobs/backup/run", nil)
-	req.Header.Set("Authorization", "Bearer ")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
 	}
 }

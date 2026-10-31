@@ -1,48 +1,37 @@
 package config
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
-// clearAPIEnv keeps values from the developer's environment out of the tests
-func clearAPIEnv(t *testing.T) {
-	t.Setenv("API_LISTEN", "")
-	t.Setenv("API_TOKEN", "")
-}
-
-func TestAPIDisabledByDefault(t *testing.T) {
+func TestAPIEnabledByDefault(t *testing.T) {
 	setup(t, "")
-	clearAPIEnv(t)
+	t.Setenv("API_ENABLED", "")
 	c, err := Get()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if c.API.Listen != "" {
-		t.Fatalf("expected api to be disabled, got listen %q", c.API.Listen)
+	if !c.API.Enabled {
+		t.Fatal("expected api to be enabled by default")
 	}
 }
 
-func TestAPIRequiresToken(t *testing.T) {
-	setup(t, "api:\n  listen: \":2113\"\n")
-	clearAPIEnv(t)
-	_, err := Get()
-	if err == nil || !strings.Contains(err.Error(), "API_TOKEN") {
-		t.Fatalf("expected missing token error, got %v", err)
-	}
-
-	t.Setenv("API_TOKEN", "too-short")
-	_, err = Get()
-	if err == nil || !strings.Contains(err.Error(), "API_TOKEN") {
-		t.Fatalf("expected short token error, got %v", err)
-	}
-
-	t.Setenv("API_TOKEN", "0123456789abcdef")
+func TestAPIDisable(t *testing.T) {
+	setup(t, "api:\n  enabled: false\n")
+	t.Setenv("API_ENABLED", "")
 	c, err := Get()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if c.API.Listen != ":2113" || c.API.Token != "0123456789abcdef" {
-		t.Fatalf("unexpected api config: %+v", c.API)
+	if c.API.Enabled {
+		t.Fatal("expected api.enabled false from config")
+	}
+
+	setup(t, "")
+	t.Setenv("API_ENABLED", "false")
+	c, err = Get()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.API.Enabled {
+		t.Fatal("expected api.enabled false from API_ENABLED")
 	}
 }

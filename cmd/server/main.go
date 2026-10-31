@@ -135,28 +135,25 @@ func main() {
 	}()
 	slog.Info("http server started", "port", "2112")
 
-	// API to trigger jobs, on its own listener so it isn't exposed wherever
-	// the metrics endpoint is
-	var apiServer *http.Server
-	if c.API.Listen != "" {
-		apiServer = &http.Server{
-			Addr: c.API.Listen,
-			Handler: api.NewHandler(c.API.Token, map[string]api.Runner{
-				"backup": backupJob,
-				"s3":     s3Job,
-				"check":  checkJob,
-				"prune":  pruneJob,
-			}),
-		}
+	// API to trigger jobs from the CLI within the container
+	var apiServer *api.Server
+	if c.API.Enabled {
+		apiServer, err = api.NewServer(api.SocketPath, map[string]api.Runner{
+			"backup": backupJob,
+			"s3":     s3Job,
+			"check":  checkJob,
+			"prune":  pruneJob,
+		})
+		panicOnError("failed to start api server", err)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			if err := apiServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				panicOnError("failed to start api server", err)
+			if err := apiServer.Serve(); err != nil {
+				panicOnError("failed to serve api", err)
 			}
 		}()
-		slog.Info("api server started", "listen", c.API.Listen)
+		slog.Info("api server started", "socket", api.SocketPath)
 	}
 
 	// Wait for termination signal
