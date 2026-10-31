@@ -11,6 +11,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/klauspost/pgzip"
+	"github.com/korbiniankuhn/auto-restic/internal/api"
 	"github.com/korbiniankuhn/auto-restic/internal/config"
 	"github.com/korbiniankuhn/auto-restic/internal/restic"
 	"github.com/korbiniankuhn/auto-restic/internal/s3"
@@ -293,6 +294,25 @@ func main() {
 	s3RestoreCmd.MarkFlagRequired("version-id")
 	s3RestoreCmd.MarkFlagRequired("mount-path")
 	s3Cmd.AddCommand(s3RestoreCmd)
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:       "run <" + strings.Join(api.Jobs, "|") + ">",
+		Short:     "Trigger a job on the running server",
+		Long:      "Queue a job on the auto-restic server running in the same container. The server runs it like a scheduled job (one job at a time) and records the metrics. The command returns once the job is queued; follow the server logs or metrics for the result.",
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		ValidArgs: api.Jobs,
+		// Talks to the server only, so it doesn't need the config
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := api.Trigger(api.SocketPath, args[0]); err != nil {
+				return fmt.Errorf("failed to trigger %s: %w", args[0], err)
+			}
+			println("Queued job:", args[0])
+			return nil
+		},
+	})
 
 	rootCmd.AddCommand(resticCmd, s3Cmd)
 
