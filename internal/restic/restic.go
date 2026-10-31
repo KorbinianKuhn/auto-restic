@@ -177,6 +177,25 @@ func (r Restic) ForgetAndPrune(keepDaily, keepWeekly, keepMonthly int) error {
 	return nil
 }
 
+// Unlock removes stale repository locks, e.g. left behind when the container
+// was killed during a backup. Locks are stale once restic stopped refreshing
+// them for 30 minutes. removeAll also removes locks that are not stale yet,
+// so it must only be used when no other restic process uses the repository.
+func (r Restic) Unlock(removeAll bool) (string, error) {
+	args := []string{"unlock"}
+	if removeAll {
+		args = append(args, "--remove-all")
+	}
+
+	output, err := r.run(queryTimeout, args...)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to unlock restic repository: %w %s", err, output)
+	}
+
+	return string(output), nil
+}
+
 type snapshotJson struct {
 	Time           time.Time     `json:"time"`
 	Parent         string        `json:"parent"`

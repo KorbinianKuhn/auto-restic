@@ -97,7 +97,7 @@ services:
 
 ## CLI
 
-A CLI is provided to list, remove, and restore backups (restic or S3). The CLI uses the same config as the server (e.g. for access keys, secrets).
+A CLI is provided to list, remove, and restore backups (restic or S3) and to unlock the restic repository. The CLI uses the same config as the server (e.g. for access keys, secrets).
 
 Connect to a running container
 
@@ -116,9 +116,12 @@ docker compose run --entrypoint "/bin/sh" auto-restic
 | auto-restic restic ls                                                  | List all local backups and snapshots        |
 | auto-restic restic rm --name ""                                        | Remove all snapshots of a backup            |
 | auto-restic restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
+| auto-restic restic unlock [--remove-all]                               | Remove stale (or all) repository locks      |
 | auto-restic s3 ls                                                      | List all S3 backups and versions            |
 | auto-restic s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
 | auto-restic s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
+
+If the container was killed while restic held a lock (e.g. during a backup), following runs fail with `repository is already locked`. `auto-restic restic unlock` removes locks that haven't been refreshed for 30 minutes. To remove them right away use `--remove-all`, but only while no backup is running.
 
 ### S3 (Disaster Recovery)
 

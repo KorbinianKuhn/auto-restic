@@ -28,6 +28,7 @@ case "$1" in
     wait
     exit 0 ;;
   forget) echo "boom"; exit 1 ;;
+  unlock) echo "$@" > "$MARKER"; exit 0 ;;
   dump)
     case "$2" in
       ok) printf 'tar-data'; exit 0 ;;
@@ -99,6 +100,30 @@ func TestErrorIncludesOutput(t *testing.T) {
 	var timeoutErr *utils.TimeoutError
 	if errors.As(err, &timeoutErr) {
 		t.Fatalf("expected no timeout error, got %v", err)
+	}
+}
+
+func TestUnlock(t *testing.T) {
+	marker := setupFakeRestic(t)
+	r, err := NewRestic(t.TempDir(), "password")
+	if err != nil {
+		t.Fatalf("failed to create restic: %v", err)
+	}
+
+	for _, tc := range []struct {
+		removeAll bool
+		want      string
+	}{
+		{false, "unlock"},
+		{true, "unlock --remove-all"},
+	} {
+		if _, err := r.Unlock(tc.removeAll); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		content, err := os.ReadFile(marker)
+		if err != nil || strings.TrimSpace(string(content)) != tc.want {
+			t.Fatalf("expected args %q, got %q, error: %v", tc.want, content, err)
+		}
 	}
 }
 
