@@ -124,7 +124,7 @@ func Trigger(socketPath, job string) error {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to reach server on %s, is it running with api.enabled?: %w", socketPath, err)
+		return fmt.Errorf("failed to reach server on %s, is it running in this container?: %w", socketPath, err)
 	}
 	defer resp.Body.Close()
 

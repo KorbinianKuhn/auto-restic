@@ -81,10 +81,6 @@ type S3Config struct {
 	Secure     bool          `mapstructure:"secure"`
 }
 
-type APIConfig struct {
-	Enabled bool `mapstructure:"enabled"`
-}
-
 type BackupConfig struct {
 	Name        string `mapstructure:"name"`
 	Path        string `mapstructure:"path"`
@@ -128,7 +124,6 @@ type Config struct {
 	Cron           CronConfig     `mapstructure:"cron"`
 	S3             S3Config       `mapstructure:"s3"`
 	MetricsEnabled bool           `mapstructure:"metrics_enabled"`
-	API            APIConfig      `mapstructure:"api"`
 	Backups        []BackupConfig `mapstructure:"backups"`
 }
 
@@ -168,7 +163,6 @@ func Get() (Config, error) {
 	_ = v.BindEnv("s3.retries")
 	_ = v.BindEnv("s3.timeout")
 	_ = v.BindEnv("s3.secure")
-	_ = v.BindEnv("api.enabled")
 
 	// Default values
 	v.SetDefault("logging.level", "info")
@@ -185,7 +179,6 @@ func Get() (Config, error) {
 	v.SetDefault("metrics_enabled", true)
 	v.SetDefault("s3.retries", 2)
 	v.SetDefault("s3.secure", true)
-	v.SetDefault("api.enabled", true)
 
 	// Optionally load config file
 	if err := v.ReadInConfig(); err != nil {

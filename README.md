@@ -56,9 +56,6 @@ s3:
   retries: 2 # Additional attempts. Default = 2
   timeout: 0 # Abort a single upload attempt, e.g. 2h. Default = 0 (no timeout)
 
-api:
-  enabled: true # Allow the CLI to trigger jobs, see Trigger jobs. Default = true
-
 backups:
   - path: /data/mongodb-dump
     name: mongodb-dump # required, only letters, digits, ".", "_" and "-"
@@ -131,7 +128,7 @@ If the container was killed while restic held a lock (e.g. during a backup), fol
 
 `auto-restic run <backup|s3|check|prune>` asks the server to run a job now, e.g. before maintenance. The server queues it like a scheduled run: it waits for a running job to finish, and records the same logs and metrics. The command returns once the job is queued.
 
-The CLI talks to the server over a unix socket in the container, so it needs no credentials and no exposed port. Disable it with `api.enabled: false` (or `API_ENABLED=false`).
+The CLI talks to the server over a unix socket in `/tmp` of the container, so it needs no credentials and no exposed port. If the socket can't be created (e.g. on a read-only filesystem), the server logs a warning and keeps running the scheduled jobs.
 
 ### S3 (Disaster Recovery)
 

@@ -135,22 +135,24 @@ func main() {
 	}()
 	slog.Info("http server started", "port", "2112")
 
-	// API to trigger jobs from the CLI within the container
-	var apiServer *api.Server
-	if c.API.Enabled {
-		apiServer, err = api.NewServer(api.SocketPath, map[string]api.Runner{
-			"backup": backupJob,
-			"s3":     s3Job,
-			"check":  checkJob,
-			"prune":  pruneJob,
-		})
-		panicOnError("failed to start api server", err)
+	// API to trigger jobs from the CLI within the container. Not essential,
+	// so the scheduled jobs keep running if the socket can't be created (e.g.
+	// on a read-only filesystem).
+	apiServer, err := api.NewServer(api.SocketPath, map[string]api.Runner{
+		"backup": backupJob,
+		"s3":     s3Job,
+		"check":  checkJob,
+		"prune":  pruneJob,
+	})
+	if err != nil {
+		slog.Warn("api server not started, jobs can't be triggered via the cli", "error", err)
+	} else {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			if err := apiServer.Serve(); err != nil {
-				panicOnError("failed to serve api", err)
+				slog.Error("api server failed, jobs can't be triggered via the cli", "error", err)
 			}
 		}()
 		slog.Info("api server started", "socket", api.SocketPath)
@@ -168,7 +170,7 @@ func main() {
 		apiCtx, apiCancel := context.WithTimeout(context.TODO(), 5*time.Second)
 		defer apiCancel()
 		if err := apiServer.Shutdown(apiCtx); err != nil {
-			panicOnError("failed to shutdown api server", err)
+			slog.Warn("failed to shutdown api server", "error", err)
 		}
 	}
 

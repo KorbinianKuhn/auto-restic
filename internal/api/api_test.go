@@ -105,8 +105,8 @@ func TestSecondServerIsRejected(t *testing.T) {
 
 func TestTriggerWithoutServer(t *testing.T) {
 	err := Trigger(filepath.Join(t.TempDir(), "missing.sock"), "backup")
-	if err == nil || !strings.Contains(err.Error(), "api.enabled") {
-		t.Fatalf("expected a hint to enable the api, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "is it running") {
+		t.Fatalf("expected a hint that the server isn't running, got %v", err)
 	}
 }
 
