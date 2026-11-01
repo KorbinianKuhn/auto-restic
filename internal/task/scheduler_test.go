@@ -1,0 +1,70 @@
+package task
+
+import (
+	"testing"
+	"time"
+
+	"github.com/go-co-op/gocron/v2"
+)
+
+// TestRunNowWaitsForRunningJob ensures a triggered job is queued behind a
+// running job instead of running in parallel or being dropped
+func TestRunNowWaitsForRunningJob(t *testing.T) {
+	scheduler, err := NewScheduler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer scheduler.Shutdown()
+
+	release := make(chan struct{})
+	started := make(chan string, 2)
+	never := gocron.CronJob("0 0 0 1 1 *", true)
+
+	slowJob, err := scheduler.NewJob(never, gocron.NewTask(func() {
+		started <- "slow"
+		<-release
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupJob, err := scheduler.NewJob(never, gocron.NewTask(func() {
+		started <- "backup"
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler.Start()
+
+	if err := slowJob.RunNow(); err != nil {
+		t.Fatalf("failed to trigger slow job: %v", err)
+	}
+	if got := receive(t, started); got != "slow" {
+		t.Fatalf("expected slow job to start, got %s", got)
+	}
+
+	// Returns right away although the slow job blocks the scheduler
+	if err := backupJob.RunNow(); err != nil {
+		t.Fatalf("failed to trigger backup job: %v", err)
+	}
+	select {
+	case got := <-started:
+		t.Fatalf("expected %s to wait for the running job", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(release)
+	if got := receive(t, started); got != "backup" {
+		t.Fatalf("expected backup job to run after the slow job, got %s", got)
+	}
+}
+
+func receive(t *testing.T, ch <-chan string) string {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for job")
+		return ""
+	}
+}
