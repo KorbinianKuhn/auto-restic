@@ -84,6 +84,7 @@ services:
   auto-restic:
     image: ghcr.io/korbiniankuhn/auto-restic:1.0.0
     container_name: auto-restic
+    stop_grace_period: 2m # let a running job release the restic lock on shutdown
     ports:
       - 127.0.0.1:2112:2112
     volumes:
@@ -94,6 +95,8 @@ services:
       - ./restore:/restore
       - /var/run/docker.sock:/var/run/docker.sock # only required if you run docker commands for pre-post backup scripts
 ```
+
+On shutdown, a running job is interrupted: restic gets SIGINT and up to 1 minute to release its repository lock, `pre_command` is killed and S3 uploads are aborted. `post_command` still runs, so a service stopped by `pre_command` is started again. The server waits up to 90 seconds for the job, so `stop_grace_period` must be longer than that, Docker's default of 10 seconds is not enough. An interrupted job isn't counted as failed in the metrics.
 
 ## CLI
 

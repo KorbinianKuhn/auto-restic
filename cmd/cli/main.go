@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path"
 	"sort"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 
 	"filippo.io/age"
@@ -124,7 +126,7 @@ func main() {
 
 			session := cmd.Context().Value(ctxKeySession).(*Session)
 
-			output, err := session.Restic.RemoveBackupDirectory(backupName)
+			output, err := session.Restic.RemoveBackupDirectory(cmd.Context(), backupName)
 			if err != nil {
 				return fmt.Errorf("failed to remove restic snapshots: %w", err)
 			}
@@ -145,7 +147,7 @@ func main() {
 			mountPath, _ := cmd.Flags().GetString("mount-path")
 			session := cmd.Context().Value(ctxKeySession).(*Session)
 
-			err := session.Restic.Restore(snapshotID, mountPath)
+			err := session.Restic.Restore(cmd.Context(), snapshotID, mountPath)
 			if err != nil {
 				return fmt.Errorf("failed to restore restic snapshot: %w", err)
 			}
@@ -318,7 +320,12 @@ func main() {
 
 	rootCmd.AddCommand(resticCmd, s3Cmd)
 
-	if err := rootCmd.Execute(); err != nil {
+	// Ctrl-C or SIGTERM cancels the context, so restic gets the chance to
+	// release its repository lock before the CLI exits
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	err := rootCmd.ExecuteContext(ctx)
+	stop()
+	if err != nil {
 		fmt.Println("command execution failed:", err)
 		os.Exit(1)
 	}

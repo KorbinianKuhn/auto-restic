@@ -1,6 +1,7 @@
 package restic
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,7 +51,7 @@ func NewRestic(path, password string, opts ...Option) (Restic, error) {
 		opt(&r)
 	}
 
-	output, err := r.run(queryTimeout, "snapshots", "--latest=1", "--no-lock")
+	output, err := r.run(context.Background(), queryTimeout, "snapshots", "--latest=1", "--no-lock")
 
 	if err == nil {
 		return r, nil
@@ -78,10 +79,11 @@ func (r Restic) getCommandEnv() []string {
 }
 
 // run executes a restic command with the repository environment and returns
-// its combined output. On timeout (0 disables it) restic receives SIGINT so it
-// can release its repository lock, and is killed if it does not exit in time.
-func (r Restic) run(timeout time.Duration, args ...string) ([]byte, error) {
-	ctx, cancel := utils.ContextWithOptionalTimeout(timeout)
+// its combined output. On timeout (0 disables it) or when ctx is cancelled
+// restic receives SIGINT so it can release its repository lock, and is killed
+// if it does not exit in time.
+func (r Restic) run(ctx context.Context, timeout time.Duration, args ...string) ([]byte, error) {
+	ctx, cancel := utils.ContextWithOptionalTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "restic", args...)
@@ -96,7 +98,7 @@ func (r Restic) run(timeout time.Duration, args ...string) ([]byte, error) {
 }
 
 func (r Restic) init() error {
-	output, err := r.run(queryTimeout, "init")
+	output, err := r.run(context.Background(), queryTimeout, "init")
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize restic repository %s: %w %s", r.repository, err, output)
@@ -109,7 +111,7 @@ func (r Restic) init() error {
 // container which changes whenever the container is recreated
 const hostname = "auto-restic"
 
-func (r Restic) BackupDirectory(name, path, exclude, excludeFile string) error {
+func (r Restic) BackupDirectory(ctx context.Context, name, path, exclude, excludeFile string) error {
 	args := []string{"backup", path, "--host", hostname, "--tag", fmt.Sprintf("name=%s", name), "--json"}
 	if exclude != "" {
 		args = append(args, "--exclude", exclude)
@@ -118,7 +120,7 @@ func (r Restic) BackupDirectory(name, path, exclude, excludeFile string) error {
 		args = append(args, "--exclude-file", excludeFile)
 	}
 
-	output, err := r.run(r.timeout, args...)
+	output, err := r.run(ctx, r.timeout, args...)
 
 	if err != nil {
 		return fmt.Errorf("failed to backup directory %s: %w %s", path, err, output)
@@ -127,7 +129,7 @@ func (r Restic) BackupDirectory(name, path, exclude, excludeFile string) error {
 	return nil
 }
 
-func (r Restic) RemoveBackupDirectory(name string) (string, error) {
+func (r Restic) RemoveBackupDirectory(ctx context.Context, name string) (string, error) {
 	snapshots, err := r.listSnapshotsByName(name)
 
 	if err != nil {
@@ -145,7 +147,7 @@ func (r Restic) RemoveBackupDirectory(name string) (string, error) {
 
 	args := append([]string{"forget", "--prune", "--json"}, ids...)
 
-	output, err := r.run(r.timeout, args...)
+	output, err := r.run(ctx, r.timeout, args...)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to remove backup %s: %w %s", name, err, output)
@@ -154,8 +156,8 @@ func (r Restic) RemoveBackupDirectory(name string) (string, error) {
 	return string(output), nil
 }
 
-func (r Restic) Check() error {
-	output, err := r.run(r.timeout, "check")
+func (r Restic) Check(ctx context.Context) error {
+	output, err := r.run(ctx, r.timeout, "check")
 
 	if err != nil {
 		return fmt.Errorf("failed to check restic repository: %w %s", err, output)
@@ -167,8 +169,8 @@ func (r Restic) Check() error {
 // ForgetAndPrune applies the retention policy per backup name. Grouping by tags
 // instead of the default host and paths also covers snapshots that were created
 // with a different hostname
-func (r Restic) ForgetAndPrune(keepDaily, keepWeekly, keepMonthly int) error {
-	output, err := r.run(r.timeout, "forget", "--prune", "--group-by", "tags", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
+func (r Restic) ForgetAndPrune(ctx context.Context, keepDaily, keepWeekly, keepMonthly int) error {
+	output, err := r.run(ctx, r.timeout, "forget", "--prune", "--group-by", "tags", fmt.Sprintf("--keep-daily=%d", keepDaily), fmt.Sprintf("--keep-weekly=%d", keepWeekly), fmt.Sprintf("--keep-monthly=%d", keepMonthly))
 
 	if err != nil {
 		return fmt.Errorf("failed to forget old backups: %w %s", err, output)
@@ -187,7 +189,7 @@ func (r Restic) Unlock(removeAll bool) (string, error) {
 		args = append(args, "--remove-all")
 	}
 
-	output, err := r.run(queryTimeout, args...)
+	output, err := r.run(context.Background(), queryTimeout, args...)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to unlock restic repository: %w %s", err, output)
@@ -250,7 +252,7 @@ func (s snapshotJson) toInternalSnapshot() Snapshot {
 }
 
 func (r Restic) ListSnapshots() ([]Snapshot, error) {
-	output, err := r.run(queryTimeout, "snapshots", "--no-lock", "--json")
+	output, err := r.run(context.Background(), queryTimeout, "snapshots", "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
@@ -271,7 +273,7 @@ func (r Restic) ListSnapshots() ([]Snapshot, error) {
 }
 
 func (r Restic) listSnapshotsByName(name string) ([]Snapshot, error) {
-	output, err := r.run(queryTimeout, "snapshots", "--tag", fmt.Sprintf("name=%s", name), "--no-lock", "--json")
+	output, err := r.run(context.Background(), queryTimeout, "snapshots", "--tag", fmt.Sprintf("name=%s", name), "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots by name: %w %s", err, output)
@@ -292,7 +294,7 @@ func (r Restic) listSnapshotsByName(name string) ([]Snapshot, error) {
 }
 
 func (r Restic) ListLatestSnapshots() ([]Snapshot, error) {
-	output, err := r.run(queryTimeout, "snapshots", "--latest=1", "--no-lock", "--json")
+	output, err := r.run(context.Background(), queryTimeout, "snapshots", "--latest=1", "--no-lock", "--json")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list snapshots: %w %s", err, output)
@@ -336,7 +338,7 @@ type SnapshotStats struct {
 }
 
 func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
-	output, err := r.run(r.timeout, "stats", "--json", "--mode", "raw-data", "--no-lock", "--tag", fmt.Sprintf("name=%s", name))
+	output, err := r.run(context.Background(), r.timeout, "stats", "--json", "--mode", "raw-data", "--no-lock", "--tag", fmt.Sprintf("name=%s", name))
 
 	if err != nil {
 		return SnapshotStats{}, fmt.Errorf("failed to get snapshot stats: %w %s", err, output)
@@ -351,8 +353,8 @@ func (r Restic) GetSnapshotStatsByName(name string) (SnapshotStats, error) {
 	return stats, nil
 }
 
-func (r Restic) Restore(snapshot, path string) error {
-	output, err := r.run(r.timeout, "restore", snapshot, "--target", path, "--no-lock")
+func (r Restic) Restore(ctx context.Context, snapshot, path string) error {
+	output, err := r.run(ctx, r.timeout, "restore", snapshot, "--target", path, "--no-lock")
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot: %s %w %s", snapshot, err, output)
 	}
@@ -362,11 +364,11 @@ func (r Restic) Restore(snapshot, path string) error {
 
 // Dump streams the snapshot as tar archive to w. Paths are relative to "/",
 // the same layout as a restore of the snapshot. It takes the shared repository
-// lock. On timeout restic receives SIGINT so it can release its lock, and is
-// killed if it does not exit in time. If writing to w fails, restic is stopped
-// and the write error is returned.
-func (r Restic) Dump(snapshot string, w io.Writer) error {
-	ctx, cancel := utils.ContextWithOptionalTimeout(r.timeout)
+// lock. On timeout or when ctx is cancelled restic receives SIGINT so it can
+// release its lock, and is killed if it does not exit in time. If writing to w
+// fails, restic is stopped and the write error is returned.
+func (r Restic) Dump(ctx context.Context, snapshot string, w io.Writer) error {
+	ctx, cancel := utils.ContextWithOptionalTimeout(ctx, r.timeout)
 	defer cancel()
 
 	stderr := &limitedBuffer{limit: maxStderrSize}
