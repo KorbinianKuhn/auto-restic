@@ -64,11 +64,7 @@ func main() {
 	wg := sync.WaitGroup{}
 
 	// Schedule jobs
-	scheduler, err := gocron.NewScheduler(
-		gocron.WithLimitConcurrentJobs(1, gocron.LimitModeWait),
-		// gocron recovers job panics and reports them only via its logger
-		gocron.WithLogger(slog.Default()),
-	)
+	scheduler, err := task.NewScheduler()
 	panicOnError("failed to create scheduler", err)
 
 	// Pre backup scripts and restic snapshot creation

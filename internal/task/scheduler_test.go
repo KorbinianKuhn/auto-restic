@@ -1,4 +1,4 @@
-package api
+package task
 
 import (
 	"testing"
@@ -7,10 +7,10 @@ import (
 	"github.com/go-co-op/gocron/v2"
 )
 
-// TestTriggerWaitsForRunningJob uses the scheduler setup of the server: a
-// triggered job is queued behind a running job instead of running in parallel
-func TestTriggerWaitsForRunningJob(t *testing.T) {
-	scheduler, err := gocron.NewScheduler(gocron.WithLimitConcurrentJobs(1, gocron.LimitModeWait))
+// TestRunNowWaitsForRunningJob ensures a triggered job is queued behind a
+// running job instead of running in parallel or being dropped
+func TestRunNowWaitsForRunningJob(t *testing.T) {
+	scheduler, err := NewScheduler()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,9 +35,7 @@ func TestTriggerWaitsForRunningJob(t *testing.T) {
 	}
 	scheduler.Start()
 
-	socket := startServer(t, map[string]Runner{"slow": slowJob, "backup": backupJob})
-
-	if err := Trigger(socket, "slow"); err != nil {
+	if err := slowJob.RunNow(); err != nil {
 		t.Fatalf("failed to trigger slow job: %v", err)
 	}
 	if got := receive(t, started); got != "slow" {
@@ -45,7 +43,7 @@ func TestTriggerWaitsForRunningJob(t *testing.T) {
 	}
 
 	// Returns right away although the slow job blocks the scheduler
-	if err := Trigger(socket, "backup"); err != nil {
+	if err := backupJob.RunNow(); err != nil {
 		t.Fatalf("failed to trigger backup job: %v", err)
 	}
 	select {

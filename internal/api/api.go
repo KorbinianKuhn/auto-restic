@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -20,7 +19,7 @@ var Jobs = []string{"backup", "s3", "check", "prune"}
 // SocketPath is where the server listens. A unix socket is only reachable
 // from within the container (e.g. via docker exec), so it needs no
 // authentication and no exposed port.
-var SocketPath = filepath.Join(os.TempDir(), "auto-restic.sock")
+const SocketPath = "/tmp/auto-restic.sock"
 
 // Runner queues a scheduled job for an immediate run. gocron.Job implements it.
 type Runner interface {
@@ -36,6 +35,16 @@ type Server struct {
 }
 
 func NewServer(socketPath string, runners map[string]Runner) (*Server, error) {
+	// The CLI only offers the jobs in Jobs, so the server must serve exactly those
+	for _, job := range Jobs {
+		if runners[job] == nil {
+			return nil, fmt.Errorf("missing runner for job %s", job)
+		}
+	}
+	if len(runners) != len(Jobs) {
+		return nil, fmt.Errorf("expected runners for jobs %s only, got %d runners", strings.Join(Jobs, ", "), len(runners))
+	}
+
 	// A server that was killed leaves its socket behind
 	if conn, err := net.Dial("unix", socketPath); err == nil {
 		conn.Close()
@@ -95,7 +104,6 @@ func newHandler(runners map[string]Runner) http.Handler {
 
 		slog.Info("job triggered via api", "job", name)
 		w.WriteHeader(http.StatusAccepted)
-		fmt.Fprintf(w, "job %s queued\n", name)
 	})
 	return mux
 }

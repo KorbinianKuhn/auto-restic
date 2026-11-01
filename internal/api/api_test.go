@@ -21,6 +21,18 @@ func (f *fakeRunner) RunNow() error {
 	return f.err
 }
 
+// fakeRunners returns a runner for every job in Jobs, replaced by overrides
+func fakeRunners(overrides map[string]Runner) map[string]Runner {
+	runners := map[string]Runner{}
+	for _, job := range Jobs {
+		runners[job] = &fakeRunner{}
+	}
+	for job, runner := range overrides {
+		runners[job] = runner
+	}
+	return runners
+}
+
 // startServer serves runners on a socket in a short temp dir, since unix
 // socket paths are limited to about 100 characters
 func startServer(t *testing.T, runners map[string]Runner) string {
@@ -50,7 +62,7 @@ func startServer(t *testing.T, runners map[string]Runner) string {
 func TestTrigger(t *testing.T) {
 	backup := &fakeRunner{}
 	failing := &fakeRunner{err: errors.New("queue full")}
-	socket := startServer(t, map[string]Runner{"backup": backup, "prune": failing})
+	socket := startServer(t, fakeRunners(map[string]Runner{"backup": backup, "prune": failing}))
 
 	if err := Trigger(socket, "backup"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -68,7 +80,7 @@ func TestTrigger(t *testing.T) {
 }
 
 func TestSocketPermissions(t *testing.T) {
-	socket := startServer(t, nil)
+	socket := startServer(t, fakeRunners(nil))
 	info, err := os.Stat(socket)
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +101,7 @@ func TestStaleSocketIsReplaced(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server, err := NewServer(socket, nil)
+	server, err := NewServer(socket, fakeRunners(nil))
 	if err != nil {
 		t.Fatalf("expected stale socket to be replaced, got %v", err)
 	}
@@ -97,8 +109,8 @@ func TestStaleSocketIsReplaced(t *testing.T) {
 }
 
 func TestSecondServerIsRejected(t *testing.T) {
-	socket := startServer(t, nil)
-	if _, err := NewServer(socket, nil); err == nil || !strings.Contains(err.Error(), "another server") {
+	socket := startServer(t, fakeRunners(nil))
+	if _, err := NewServer(socket, fakeRunners(nil)); err == nil || !strings.Contains(err.Error(), "another server") {
 		t.Fatalf("expected running server to be detected, got %v", err)
 	}
 }
@@ -107,6 +119,21 @@ func TestTriggerWithoutServer(t *testing.T) {
 	err := Trigger(filepath.Join(t.TempDir(), "missing.sock"), "backup")
 	if err == nil || !strings.Contains(err.Error(), "is it running") {
 		t.Fatalf("expected a hint that the server isn't running, got %v", err)
+	}
+}
+
+func TestRunnersMustMatchJobs(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "api.sock")
+
+	missing := fakeRunners(nil)
+	delete(missing, "backup")
+	if _, err := NewServer(socket, missing); err == nil || !strings.Contains(err.Error(), "missing runner for job backup") {
+		t.Fatalf("expected missing runner error, got %v", err)
+	}
+
+	extra := fakeRunners(map[string]Runner{"unknown": &fakeRunner{}})
+	if _, err := NewServer(socket, extra); err == nil || !strings.Contains(err.Error(), "expected runners") {
+		t.Fatalf("expected extra runner error, got %v", err)
 	}
 }
 
