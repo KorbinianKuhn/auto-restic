@@ -3,6 +3,7 @@ package restic
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -66,7 +67,7 @@ func TestTimeoutInterruptsRestic(t *testing.T) {
 	}
 
 	start := time.Now()
-	err = r.Check()
+	err = r.Check(t.Context())
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Fatalf("expected check to be aborted, took %s", elapsed)
 	}
@@ -85,6 +86,36 @@ func TestTimeoutInterruptsRestic(t *testing.T) {
 	}
 }
 
+func TestCancelInterruptsRestic(t *testing.T) {
+	marker := setupFakeRestic(t)
+
+	r, err := NewRestic(t.TempDir(), "password")
+	if err != nil {
+		t.Fatalf("failed to create restic: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(500*time.Millisecond, cancel)
+
+	start := time.Now()
+	err = r.Check(ctx)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("expected check to be aborted, took %s", elapsed)
+	}
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	var timeoutErr *utils.TimeoutError
+	if errors.As(err, &timeoutErr) {
+		t.Fatalf("expected no timeout error, got %v", err)
+	}
+
+	content, err := os.ReadFile(marker)
+	if err != nil || strings.TrimSpace(string(content)) != "interrupted" {
+		t.Fatalf("expected restic to receive SIGINT, marker: %q, error: %v", content, err)
+	}
+}
+
 func TestErrorIncludesOutput(t *testing.T) {
 	setupFakeRestic(t)
 
@@ -93,7 +124,7 @@ func TestErrorIncludesOutput(t *testing.T) {
 		t.Fatalf("failed to create restic: %v", err)
 	}
 
-	err = r.ForgetAndPrune(7, 4, 3)
+	err = r.ForgetAndPrune(t.Context(), 7, 4, 3)
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected command output in error, got %v", err)
 	}
@@ -135,14 +166,14 @@ func TestDump(t *testing.T) {
 	}
 
 	buf := &bytes.Buffer{}
-	if err := r.Dump("ok", buf); err != nil {
+	if err := r.Dump(t.Context(), "ok", buf); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if buf.String() != "tar-data" {
 		t.Fatalf("expected dump output, got %q", buf.String())
 	}
 
-	err = r.Dump("fail", io.Discard)
+	err = r.Dump(t.Context(), "fail", io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "dump boom") {
 		t.Fatalf("expected stderr in error, got %v", err)
 	}
@@ -155,7 +186,7 @@ func TestDumpTimeoutInterruptsRestic(t *testing.T) {
 		t.Fatalf("failed to create restic: %v", err)
 	}
 
-	err = r.Dump("hang", io.Discard)
+	err = r.Dump(t.Context(), "hang", io.Discard)
 	var timeoutErr *utils.TimeoutError
 	if !errors.As(err, &timeoutErr) || timeoutErr.Operation != "restic dump" {
 		t.Fatalf("expected restic dump timeout error, got %v", err)
@@ -182,7 +213,7 @@ func TestDumpStopsOnWriteError(t *testing.T) {
 	}
 
 	done := make(chan error, 1)
-	go func() { done <- r.Dump("flood", failingWriter{}) }()
+	go func() { done <- r.Dump(t.Context(), "flood", failingWriter{}) }()
 	select {
 	case err := <-done:
 		if err == nil {
@@ -222,12 +253,12 @@ func TestDumpRealRestic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create restic: %v", err)
 	}
-	if err := r.BackupDirectory("data", src, "", ""); err != nil {
+	if err := r.BackupDirectory(t.Context(), "data", src, "", ""); err != nil {
 		t.Fatalf("failed to backup: %v", err)
 	}
 
 	buf := &bytes.Buffer{}
-	if err := r.Dump("latest", buf); err != nil {
+	if err := r.Dump(t.Context(), "latest", buf); err != nil {
 		t.Fatalf("failed to dump: %v", err)
 	}
 
@@ -291,10 +322,10 @@ func TestRetentionIgnoresHostname(t *testing.T) {
 		t.Fatalf("failed to create restic: %v", err)
 	}
 
-	if output, err := r.run(queryTimeout, "backup", src, "--host", "3f2a1b0c9d8e", "--tag", "name=data"); err != nil {
+	if output, err := r.run(t.Context(), queryTimeout, "backup", src, "--host", "3f2a1b0c9d8e", "--tag", "name=data"); err != nil {
 		t.Fatalf("failed to create old snapshot: %v %s", err, output)
 	}
-	if err := r.BackupDirectory("data", src, "", ""); err != nil {
+	if err := r.BackupDirectory(t.Context(), "data", src, "", ""); err != nil {
 		t.Fatalf("failed to backup: %v", err)
 	}
 
@@ -306,7 +337,7 @@ func TestRetentionIgnoresHostname(t *testing.T) {
 		t.Fatalf("expected the newest snapshot only, got %+v", latest)
 	}
 
-	if err := r.ForgetAndPrune(1, 0, 0); err != nil {
+	if err := r.ForgetAndPrune(t.Context(), 1, 0, 0); err != nil {
 		t.Fatalf("failed to forget and prune: %v", err)
 	}
 

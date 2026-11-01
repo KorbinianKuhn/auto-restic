@@ -80,14 +80,14 @@ func TestDumpArchiveRestores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create restic: %v", err)
 	}
-	if err := r.BackupDirectory("data", src, "", ""); err != nil {
+	if err := r.BackupDirectory(t.Context(), "data", src, "", ""); err != nil {
 		t.Fatalf("failed to backup: %v", err)
 	}
 
 	identity := testIdentity(t)
 	encrypted := &bytes.Buffer{}
 	err = writeEncryptedArchive(encrypted, identity.Recipient(), func(w io.Writer) error {
-		return r.Dump("latest", w)
+		return r.Dump(t.Context(), "latest", w)
 	})
 	if err != nil {
 		t.Fatalf("failed to create archive: %v", err)

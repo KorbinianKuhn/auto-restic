@@ -63,15 +63,16 @@ func main() {
 	// Wait group for graceful shutdown
 	wg := sync.WaitGroup{}
 
-	// Schedule jobs
+	// Schedule jobs. gocron passes the tasks a context that it cancels on
+	// shutdown, which interrupts running restic, shell and s3 commands.
 	scheduler, err := task.NewScheduler()
 	panicOnError("failed to create scheduler", err)
 
 	// Pre backup scripts and restic snapshot creation
 	backupJob, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.Backup, true),
-		gocron.NewTask(func() {
-			task.Backup(c, m, r)
+		gocron.NewTask(func(ctx context.Context) {
+			task.Backup(ctx, c, m, r)
 		}),
 	)
 	panicOnError("failed to schedule backup job", err)
@@ -79,8 +80,8 @@ func main() {
 	// restic check
 	checkJob, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.Check, true),
-		gocron.NewTask(func() {
-			task.ResticCheck(m, r)
+		gocron.NewTask(func(ctx context.Context) {
+			task.ResticCheck(ctx, m, r)
 		}),
 	)
 	panicOnError("failed to schedule check job", err)
@@ -88,8 +89,8 @@ func main() {
 	// restic forget and prune
 	pruneJob, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.Prune, true),
-		gocron.NewTask(func() {
-			task.ForgetAndPrune(c, m, r)
+		gocron.NewTask(func(ctx context.Context) {
+			task.ForgetAndPrune(ctx, c, m, r)
 		}),
 	)
 	panicOnError("failed to schedule prune job", err)
@@ -97,8 +98,8 @@ func main() {
 	// S3 backup
 	s3Job, err := scheduler.NewJob(
 		gocron.CronJob(c.Cron.S3, true),
-		gocron.NewTask(func() {
-			task.S3Backup(c, m, r, s)
+		gocron.NewTask(func(ctx context.Context) {
+			task.S3Backup(ctx, c, m, r, s)
 		}),
 	)
 	panicOnError("failed to schedule s3 job", err)
@@ -159,6 +160,8 @@ func main() {
 	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
 
 	<-osSignal
+	// A second signal terminates right away instead of waiting for the jobs
+	signal.Stop(osSignal)
 	slog.Info("received termination signal, shutting down")
 
 	// Stop api server first so no new jobs are queued
@@ -170,15 +173,19 @@ func main() {
 		}
 	}
 
-	// Stop scheduler
-	scheduler.Shutdown()
-	slog.Info("scheduler stopped")
+	// Stop scheduler: cancels running jobs and waits for them to finish, e.g.
+	// for restic to release its repository lock
+	if err := scheduler.Shutdown(); err != nil {
+		slog.Error("failed to stop scheduler, running jobs may have been killed", "error", err)
+	} else {
+		slog.Info("scheduler stopped")
+	}
 
 	// Stop http server
 	ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		panicOnError("failed to shutdown http server", err)
+		slog.Warn("failed to shutdown http server", "error", err)
 	}
 
 	// Run until shutdown is complete
