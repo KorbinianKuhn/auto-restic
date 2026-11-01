@@ -67,7 +67,7 @@ func NewMetrics() *Metrics {
 				Namespace: "backup",
 				Subsystem: "restic",
 				Name:      "snapshot_latest_size_bytes",
-				Help:      "Size in bytes of the latest restic snapshot per backup name",
+				Help:      "Data in bytes added to the repository by the latest restic snapshot per backup name (0 if nothing changed)",
 			},
 			[]string{"backup_name"},
 		),

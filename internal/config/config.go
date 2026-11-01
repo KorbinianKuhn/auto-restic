@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/joho/godotenv"
 
 	"github.com/spf13/viper"
@@ -32,25 +33,23 @@ func (f *LogFormat) UnmarshalText(text []byte) error {
 }
 
 type LoggingConfig struct {
-	Level     string     `mapstructure:"level"`
-	Format    LogFormat  `mapstructure:"format"`
-	SlogLevel slog.Level `mapstructure:"-"`
+	Level  slog.Level `mapstructure:"level"`
+	Format LogFormat  `mapstructure:"format"`
 }
 
-func (c *LoggingConfig) Parse() error {
-	switch strings.ToLower(c.Level) {
-	case "debug":
-		c.SlogLevel = slog.LevelDebug
-	case "info":
-		c.SlogLevel = slog.LevelInfo
-	case "warn":
-		c.SlogLevel = slog.LevelWarn
-	case "error":
-		c.SlogLevel = slog.LevelError
-	default:
-		return fmt.Errorf("invalid log level: %s", c.Level)
+// SetDefault makes the configured logger the default slog logger. For the
+// console format it keeps slog's default handler, so it only works as long as
+// slog.SetDefault wasn't called before.
+func (c LoggingConfig) SetDefault() {
+	options := &slog.HandlerOptions{Level: c.Level}
+	switch c.Format {
+	case LogFormatText:
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, options)))
+	case LogFormatJSON:
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, options)))
+	case LogFormatConsole:
+		slog.SetLogLoggerLevel(c.Level)
 	}
-	return nil
 }
 
 type ResticConfig struct {
@@ -105,12 +104,12 @@ func validateTimeout(name string, timeout time.Duration) error {
 	return nil
 }
 
-// validateRetries rejects negative values, which would otherwise skip the
-// upload entirely
 // backupNamePattern keeps names usable as restic tag ("name=<name>", no
 // commas) and S3 object key ("<name>.tar.gz.age")
 var backupNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
+// validateRetries rejects negative values, which would otherwise skip the
+// upload entirely
 func validateRetries(name string, retries int) error {
 	if retries < 0 {
 		return fmt.Errorf("%s must not be negative: %d", name, retries)
@@ -187,26 +186,14 @@ func Get() (Config, error) {
 		}
 	}
 
-	if err := v.Unmarshal(&config); err != nil {
+	// Viper's default hooks don't call UnmarshalText, which validates the log
+	// format and parses the log level
+	decodeHook := viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.TextUnmarshallerHookFunc(),
+	))
+	if err := v.Unmarshal(&config, decodeHook); err != nil {
 		return config, fmt.Errorf("unable to decode config into struct: %w", err)
-	}
-
-	if err := config.Logging.Parse(); err != nil {
-		return config, fmt.Errorf("invalid logging configuration: %w", err)
-	}
-
-	// Set logger
-	switch config.Logging.Format {
-	case LogFormatText:
-		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: config.Logging.SlogLevel,
-		})))
-	case LogFormatJSON:
-		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-			Level: config.Logging.SlogLevel,
-		})))
-	default:
-		slog.SetLogLoggerLevel(config.Logging.SlogLevel)
 	}
 
 	if config.Restic.Password == "" {

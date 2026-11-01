@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -118,5 +119,43 @@ func TestValidateRetries(t *testing.T) {
 		if err := validateRetries("s3.retries", retries); err != nil {
 			t.Fatalf("expected %d to be valid, got %v", retries, err)
 		}
+	}
+}
+
+func TestLogging(t *testing.T) {
+	setup(t, "logging:\n  level: WARN\n  format: json\n")
+
+	c, err := Get()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Logging.Level != slog.LevelWarn || c.Logging.Format != LogFormatJSON {
+		t.Fatalf("expected warn and json, got %s and %s", c.Logging.Level, c.Logging.Format)
+	}
+}
+
+func TestLoggingDefaults(t *testing.T) {
+	setup(t, "")
+
+	c, err := Get()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Logging.Level != slog.LevelInfo || c.Logging.Format != LogFormatText {
+		t.Fatalf("expected info and text, got %s and %s", c.Logging.Level, c.Logging.Format)
+	}
+}
+
+func TestInvalidLogging(t *testing.T) {
+	for name, config := range map[string]string{
+		"format": "logging:\n  format: xml\n",
+		"level":  "logging:\n  level: verbose\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			setup(t, config)
+			if _, err := Get(); err == nil {
+				t.Fatalf("expected invalid log %s to be rejected", name)
+			}
+		})
 	}
 }

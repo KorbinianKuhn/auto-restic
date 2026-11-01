@@ -8,13 +8,23 @@ terraform {
       source  = "hashicorp/local"
       version = ">= 2.0.0"
     }
+    random = {
+      source = "hashicorp/random"
+    }
+    null = {
+      source = "hashicorp/null"
+    }
   }
 }
 
 variable "endpoint" {}
 variable "region" {}
-variable "access_key" {}
-variable "secret_key" {}
+variable "access_key" {
+  sensitive = true
+}
+variable "secret_key" {
+  sensitive = true
+}
 variable "object_retention_days" {
   type        = number
   description = "Number of days to retain objects under governance mode (S3 object lock)."
@@ -68,8 +78,14 @@ resource "null_resource" "lifecycle_policy" {
     template = base64sha256(local_file.lifecycle_rules.content)
   }
 
+  # Credentials are passed via environment, so they don't show up in the
+  # logged command
   provisioner "local-exec" {
-    command = "curl -X PUT -sS --fail --user '${var.access_key}:${var.secret_key}' --aws-sigv4 'aws:amz:${var.region}:s3' -d '@lifecycle_rules.xml' https://${minio_s3_bucket.bucket.id}.${var.endpoint}/?lifecycle"
+    command = "curl -X PUT -sS --fail --user \"$S3_ACCESS_KEY:$S3_SECRET_KEY\" --aws-sigv4 'aws:amz:${var.region}:s3' -d '@${abspath(local_file.lifecycle_rules.filename)}' https://${minio_s3_bucket.bucket.id}.${var.endpoint}/?lifecycle"
+    environment = {
+      S3_ACCESS_KEY = var.access_key
+      S3_SECRET_KEY = var.secret_key
+    }
   }
 }
 

@@ -22,6 +22,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Without restic the integration tests (backup, dump, retention) are skipped
+      - name: Install restic
+        run: sudo apt-get update && sudo apt-get install -y restic
+
       - name: Vet
         run: go vet ./...
 

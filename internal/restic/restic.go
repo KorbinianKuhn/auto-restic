@@ -112,7 +112,7 @@ func (r Restic) init() error {
 const hostname = "auto-restic"
 
 func (r Restic) BackupDirectory(ctx context.Context, name, path, exclude, excludeFile string) error {
-	args := []string{"backup", path, "--host", hostname, "--tag", fmt.Sprintf("name=%s", name), "--json"}
+	args := []string{"backup", path, "--host", hostname, "--tag", fmt.Sprintf("name=%s", name)}
 	if exclude != "" {
 		args = append(args, "--exclude", exclude)
 	}
