@@ -33,48 +33,36 @@ type Session struct {
 	S3     *s3.S3
 }
 
-func panicOnError(message string, err error) {
-	if err != nil {
-		println(message, err)
-		panic(err)
-	}
-}
-
-func initConfigAndLogging() config.Config {
-	// Load config
-	c, err := config.Get()
-	panicOnError("failed to load config", err)
-
-	return c
-}
-
-func initRestic(c config.Config) restic.Restic {
-	// Initialize restic
-	r, err := restic.NewRestic(c.Restic.Repository, c.Restic.Password)
-	panicOnError("failed to initialize restic", err)
-	return r
-}
-
-func initS3(c config.Config) *s3.S3 {
-	s, err := s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket, c.S3.Secure)
-	panicOnError("failed to initialize s3", err)
-	return s
-}
-
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "auto-restic",
 		Short: "AutoRestic backup tool",
+		// main prints the error
+		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			c := initConfigAndLogging()
+			// Arguments are valid at this point, so later errors (e.g. a
+			// missing env variable) don't need the usage
+			cmd.SilenceUsage = true
+
+			c, err := config.Get()
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			c.Logging.SetDefault()
 			session := &Session{Config: c}
 
 			if cmd.Parent() != nil && cmd.Parent().Name() == "restic" {
-				session.Restic = initRestic(c)
+				session.Restic, err = restic.NewRestic(c.Restic.Repository, c.Restic.Password)
+				if err != nil {
+					return fmt.Errorf("failed to initialize restic: %w", err)
+				}
 			}
 
 			if cmd.Parent() != nil && cmd.Parent().Name() == "s3" {
-				session.S3 = initS3(c)
+				session.S3, err = s3.Get(c.S3.AccessKey, c.S3.SecretKey, c.S3.Endpoint, c.S3.Bucket, c.S3.Secure)
+				if err != nil {
+					return fmt.Errorf("failed to initialize s3: %w", err)
+				}
 			}
 
 			ctx := context.WithValue(cmd.Context(), ctxKeySession, session)
@@ -230,7 +218,7 @@ func main() {
 			versionID, _ := cmd.Flags().GetString("version-id")
 			session := cmd.Context().Value(ctxKeySession).(*Session)
 
-			err := session.S3.RemoveObject(objectKey, versionID)
+			err := session.S3.RemoveObject(cmd.Context(), objectKey, versionID)
 			if err != nil {
 				return fmt.Errorf("failed to remove S3 object: %w", err)
 			}
@@ -263,7 +251,7 @@ func main() {
 			}
 
 			// Get a reader for the S3 object (streaming)
-			s3Reader, err := session.S3.StreamDownloadFile(objectKey, versionID)
+			s3Reader, err := session.S3.StreamDownloadFile(cmd.Context(), objectKey, versionID)
 			if err != nil {
 				return fmt.Errorf("failed to get S3 stream: %w", err)
 			}
@@ -292,10 +280,9 @@ func main() {
 		},
 	}
 	s3RestoreCmd.Flags().String("object-key", "", "Key of the S3 object to restore")
-	s3RestoreCmd.Flags().String("version-id", "", "Version ID of the S3 object to restore")
+	s3RestoreCmd.Flags().String("version-id", "", "Version ID of the S3 object to restore (default: latest version)")
 	s3RestoreCmd.Flags().String("mount-path", "", "Local directory to restore the S3 object to")
 	s3RestoreCmd.MarkFlagRequired("object-key")
-	s3RestoreCmd.MarkFlagRequired("version-id")
 	s3RestoreCmd.MarkFlagRequired("mount-path")
 	s3Cmd.AddCommand(s3RestoreCmd)
 
@@ -326,7 +313,7 @@ func main() {
 	err := rootCmd.ExecuteContext(ctx)
 	stop()
 	if err != nil {
-		fmt.Println("command execution failed:", err)
+		fmt.Fprintln(os.Stderr, "command execution failed:", err)
 		os.Exit(1)
 	}
 }

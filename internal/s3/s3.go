@@ -121,8 +121,8 @@ func (s3 S3) StreamUploadFile(ctx context.Context, filename string, reader *io.P
 	return nil
 }
 
-func (s3 S3) RemoveObject(objectKey, versionID string) error {
-	err := s3.client.RemoveObject(context.TODO(), s3.bucket, objectKey, minio.RemoveObjectOptions{
+func (s3 S3) RemoveObject(ctx context.Context, objectKey, versionID string) error {
+	err := s3.client.RemoveObject(ctx, s3.bucket, objectKey, minio.RemoveObjectOptions{
 		VersionID: versionID,
 	})
 
@@ -132,8 +132,8 @@ func (s3 S3) RemoveObject(objectKey, versionID string) error {
 	return nil
 }
 
-func (s3 S3) StreamDownloadFile(objectKey, versionID string) (*minio.Object, error) {
-	obj, err := s3.client.GetObject(context.TODO(), s3.bucket, objectKey, minio.GetObjectOptions{
+func (s3 S3) StreamDownloadFile(ctx context.Context, objectKey, versionID string) (*minio.Object, error) {
+	obj, err := s3.client.GetObject(ctx, s3.bucket, objectKey, minio.GetObjectOptions{
 		VersionID: versionID,
 	})
 	if err != nil {

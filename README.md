@@ -48,7 +48,7 @@ cron:
   metrics: "0 0 0 * * *" # Every day at 00:00
   backup: "0 0 2 * * *" # Every day at 02:00
   s3: "0 1 2 * * 0" # Every Sunday 02:01
-  check: "0 2 2 * * 0" # Every Sunday 02:01
+  check: "0 2 2 * * 0" # Every Sunday 02:02
   prune: "0 3 2 * * 0" # Every Sunday 02:03
 
 s3:
@@ -114,16 +114,16 @@ or start a temporary one:
 docker compose run --entrypoint "/bin/sh" auto-restic
 ```
 
-| Command                                                                | Description                                 |
-| ---------------------------------------------------------------------- | ------------------------------------------- |
-| auto-restic restic ls                                                  | List all local backups and snapshots        |
-| auto-restic restic rm --name ""                                        | Remove all snapshots of a backup            |
-| auto-restic restic restore --snapshot-id "" --mount-path ""            | Restore snapshot to a local directory       |
-| auto-restic restic unlock [--remove-all]                               | Remove stale (or all) repository locks      |
-| auto-restic s3 ls                                                      | List all S3 backups and versions            |
-| auto-restic s3 rm --object-key "" --version-id ""                      | Remove S3 object with specific version      |
-| auto-restic s3 restore --object-key "" --version-id "" --mount-path "" | Restore object version to a local directory |
-| auto-restic run backup\|s3\|check\|prune                                 | Trigger a job on the server                 |
+| Command                                                                  | Description                                                   |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| auto-restic restic ls                                                    | List all local backups and snapshots                          |
+| auto-restic restic rm --name ""                                          | Remove all snapshots of a backup                              |
+| auto-restic restic restore --snapshot-id "" --mount-path ""              | Restore snapshot to a local directory                         |
+| auto-restic restic unlock [--remove-all]                                 | Remove stale (or all) repository locks                        |
+| auto-restic s3 ls                                                        | List all S3 backups and versions                              |
+| auto-restic s3 rm --object-key "" --version-id ""                        | Remove S3 object with specific version                        |
+| auto-restic s3 restore --object-key "" [--version-id ""] --mount-path "" | Restore object version (default: latest) to a local directory |
+| auto-restic run backup\|s3\|check\|prune                                 | Trigger a job on the server                                   |
 
 If the container was killed while restic held a lock (e.g. during a backup), following runs fail with `repository is already locked`. `auto-restic restic unlock` removes locks that haven't been refreshed for 30 minutes. To remove them right away use `--remove-all`, but only while no backup is running.
 
@@ -159,7 +159,7 @@ backup_restic_snapshot_errors_total{backup_name="mongodb-dump"} 1
 # TYPE backup_restic_snapshot_latest_duration_seconds gauge
 backup_restic_snapshot_latest_duration_seconds{backup_name="production"} 0.78878625
 backup_restic_snapshot_latest_duration_seconds{backup_name="staging"} 0.777218083
-# HELP backup_restic_snapshot_latest_size_bytes Size in bytes of the latest restic snapshot per backup name
+# HELP backup_restic_snapshot_latest_size_bytes Data in bytes added to the repository by the latest restic snapshot per backup name (0 if nothing changed)
 # TYPE backup_restic_snapshot_latest_size_bytes gauge
 backup_restic_snapshot_latest_size_bytes{backup_name="mongodb-dump"} 1240
 backup_restic_snapshot_latest_size_bytes{backup_name="production"} 0

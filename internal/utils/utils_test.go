@@ -159,6 +159,37 @@ func TestExtractTar(t *testing.T) {
 	}
 }
 
+// Read-only directories get their mode after their content is written,
+// otherwise a non-root user couldn't extract into them
+func TestExtractTarReadOnlyDirectory(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "dest")
+	archive := buildTar(t, []tarEntry{
+		{name: "ro", typeflag: tar.TypeDir, mode: 0555},
+		{name: "ro/sub", typeflag: tar.TypeDir, mode: 0555},
+		{name: "ro/sub/file.txt", typeflag: tar.TypeReg, body: "hello"},
+	})
+	// Let t.TempDir clean up the read-only directories
+	t.Cleanup(func() {
+		os.Chmod(filepath.Join(dest, "ro", "sub"), 0755)
+		os.Chmod(filepath.Join(dest, "ro"), 0755)
+	})
+
+	if err := ExtractTar(archive, dest); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dest, "ro", "sub", "file.txt"))
+	if err != nil || string(content) != "hello" {
+		t.Fatalf("expected file content, got %q (%v)", content, err)
+	}
+	for _, dir := range []string{"ro", "ro/sub"} {
+		info, err := os.Stat(filepath.Join(dest, dir))
+		if err != nil || info.Mode().Perm() != 0555 {
+			t.Fatalf("expected %s to be 0555, got %v (%v)", dir, info.Mode().Perm(), err)
+		}
+	}
+}
+
 func TestExtractTarRejectsEscapes(t *testing.T) {
 	tests := map[string][]tarEntry{
 		"parent traversal": {{name: "../evil.txt", typeflag: tar.TypeReg, body: "x"}},

@@ -28,14 +28,10 @@ func panicOnError(message string, err error) {
 }
 
 func main() {
-	// Default logger (will be overwritten during config load)
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})))
-
 	// Load config
 	c, err := config.Get()
 	panicOnError("failed to load config", err)
+	c.Logging.SetDefault()
 
 	// Initialize restic
 	r, err := restic.NewRestic(c.Restic.Repository, c.Restic.Password, restic.WithTimeout(c.Restic.Timeout))

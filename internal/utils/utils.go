@@ -45,6 +45,14 @@ func ExtractTar(r io.Reader, dest string) error {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
+	// Directories get their mode from the archive once all entries are
+	// written, so a read-only directory doesn't block writing its content
+	type dirMode struct {
+		path string
+		mode os.FileMode
+	}
+	var dirModes []dirMode
+
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -70,9 +78,10 @@ func ExtractTar(r io.Reader, dest string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+			if err := os.MkdirAll(targetPath, 0755); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
 			}
+			dirModes = append(dirModes, dirMode{targetPath, os.FileMode(header.Mode).Perm()})
 		case tar.TypeReg:
 			// Create parent directory if it doesn't exist
 			parentDir := filepath.Dir(targetPath)
@@ -96,6 +105,13 @@ func ExtractTar(r io.Reader, dest string) error {
 			}
 		default:
 			// Skip unsupported file types
+		}
+	}
+
+	// Children first, so a read-only parent doesn't block its subdirectories
+	for i := len(dirModes) - 1; i >= 0; i-- {
+		if err := os.Chmod(dirModes[i].path, dirModes[i].mode); err != nil {
+			return fmt.Errorf("failed to set directory permissions %s: %w", dirModes[i].path, err)
 		}
 	}
 	return nil
@@ -142,7 +158,6 @@ func extractRegularFile(tarReader *tar.Reader, targetPath string, header *tar.He
 	}
 	defer outFile.Close()
 
-	// Use limited copy to prevent potential DoS attacks
 	_, err = io.Copy(outFile, tarReader)
 	if err != nil {
 		return err
